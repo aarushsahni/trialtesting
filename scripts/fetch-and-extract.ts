@@ -38,6 +38,18 @@ const CONDITION_QUERIES: Record<Exclude<CancerType, 'OTHER'>, string> = {
 
 const TRIALS_PER_TYPE = 5;
 const MODEL = process.env.OPENAI_MODEL || 'gpt-5.5';
+const CHECKPOINT_DIR = join(process.cwd(), 'data', 'checkpoints');
+
+function ensureDir(path: string) {
+  if (!existsSync(path)) mkdirSync(path, { recursive: true });
+}
+
+function writeCheckpoint(name: string, payload: unknown) {
+  ensureDir(CHECKPOINT_DIR);
+  const path = join(CHECKPOINT_DIR, `${name}.json`);
+  writeFileSync(path, JSON.stringify(payload, null, 2));
+  console.log(`Checkpoint: ${path}`);
+}
 
 async function main() {
   if (!process.env.OPENAI_API_KEY) {
@@ -73,6 +85,12 @@ async function main() {
   }
 
   console.log(`\nTotal: ${fetched.length} trials\n`);
+  writeCheckpoint('01-fetched', {
+    generatedAt: new Date().toISOString(),
+    model: MODEL,
+    totalFetched: fetched.length,
+    trials: fetched,
+  });
 
   // 2. Basic eligibility extraction
   console.log('Extracting basic eligibility (gpt-5.5, high reasoning)...');
@@ -82,6 +100,12 @@ async function main() {
     (n, t) => process.stdout.write(`\r  ${n}/${t}`),
   );
   console.log('\n');
+  writeCheckpoint('02-basic-eligibility', {
+    generatedAt: new Date().toISOString(),
+    model: MODEL,
+    totalFetched: fetched.length,
+    basicByNctId: Object.fromEntries(basicMap),
+  });
 
   // 3. Cancer-specific descriptors. Use the assignedCancerType so we always
   //    extract the descriptor for the cancer type the trial was sampled for,
@@ -108,6 +132,12 @@ async function main() {
     (n, t) => process.stdout.write(`\r  ${n}/${t}`),
   );
   console.log('\n');
+  writeCheckpoint('03-descriptors', {
+    generatedAt: new Date().toISOString(),
+    model: MODEL,
+    totalFetched: fetched.length,
+    descriptorsByNctId: Object.fromEntries(descMap),
+  });
 
   // 4. Assemble & write
   const extracted: ExtractedTrial[] = fetched.map(({ cancerType, trial }) => ({
@@ -124,10 +154,11 @@ async function main() {
   };
 
   const dataDir = join(process.cwd(), 'data');
-  if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
+  ensureDir(dataDir);
   const path = join(dataDir, 'trials.json');
   writeFileSync(path, JSON.stringify(out, null, 2));
   console.log(`Wrote ${path} (${extracted.length} trials)`);
+  writeCheckpoint('04-final', out);
 }
 
 main().catch((e) => {
