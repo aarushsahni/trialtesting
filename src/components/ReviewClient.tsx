@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ExtractedTrial } from '@/lib/types';
@@ -87,10 +87,22 @@ export default function ReviewClient({
     return { totalFields: total, approvedFields: approved };
   }, [data]);
 
-  // Debounced auto-save
+  // Refs so save() always sees latest data (avoids stale closures)
+  const dataRef = useRef(data);
+  const completedRef = useRef(completed);
+  useEffect(() => { dataRef.current = data; }, [data]);
+  useEffect(() => { completedRef.current = completed; }, [completed]);
+
+  // Skip the very first effect run (mount) — without skipping every save on a brand-new trial.
+  const skipNextSaveRef = useRef(true);
+
+  // Debounced auto-save on every data change after mount
   useEffect(() => {
-    if (savedAt === null && !initialReview) return;
-    const handle = setTimeout(() => { void save(false); }, 800);
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
+    const handle = setTimeout(() => { void save(false); }, 600);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
@@ -104,8 +116,8 @@ export default function ReviewClient({
         body: JSON.stringify({
           userId,
           nctId: trial.nctId,
-          reviewedData: data,
-          completed: markCompleted || completed,
+          reviewedData: dataRef.current,
+          completed: markCompleted || completedRef.current,
         }),
       });
       setSavedAt(Date.now());
@@ -113,6 +125,12 @@ export default function ReviewClient({
     } finally {
       setSaving(false);
     }
+  }
+
+  // Save before navigating away — used by Prev / Next / "All trials" links
+  async function saveAndGo(href: string) {
+    await save(false);
+    router.push(href);
   }
 
   async function markDoneAndNext() {
@@ -142,12 +160,12 @@ export default function ReviewClient({
       {/* Sticky header */}
       <header className="sticky top-0 z-20 bg-white border-b border-slate-200">
         <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center gap-4">
-          <Link
-            href={`/review/${userId}`}
+          <button
+            onClick={() => saveAndGo(`/review/${userId}`)}
             className="text-sm text-blue-600 hover:text-blue-700 hover:underline whitespace-nowrap flex items-center gap-1"
           >
             <span>←</span> All trials
-          </Link>
+          </button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-xs text-slate-500">{trial.nctId}</span>
@@ -185,12 +203,12 @@ export default function ReviewClient({
           </button>
           <div className="flex gap-2">
             {prevNctId && (
-              <Link
-                href={`/review/${userId}/${prevNctId}`}
+              <button
+                onClick={() => saveAndGo(`/review/${userId}/${prevNctId}`)}
                 className="text-sm px-3 py-1.5 border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-blue-400 transition"
               >
                 ← Prev
-              </Link>
+              </button>
             )}
             <button
               onClick={markDoneAndNext}
@@ -330,12 +348,12 @@ export default function ReviewClient({
           {/* Bottom action bar — duplicate of header for ergonomics */}
           <div className="flex justify-end gap-2 pt-2">
             {prevNctId && (
-              <Link
-                href={`/review/${userId}/${prevNctId}`}
+              <button
+                onClick={() => saveAndGo(`/review/${userId}/${prevNctId}`)}
                 className="text-sm px-4 py-2 border border-slate-300 rounded-lg hover:bg-white hover:border-blue-400 transition bg-white/50"
               >
                 ← Prev
-              </Link>
+              </button>
             )}
             <button
               onClick={markDoneAndNext}
