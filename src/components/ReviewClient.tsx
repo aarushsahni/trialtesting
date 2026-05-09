@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ExtractedTrial } from '@/lib/types';
-import { BASIC_FIELDS, SECTION_DEFS, SECTION_BY_KEY, SectionDef, FieldDef } from '@/lib/schema/field-schemas';
+import { BASIC_FIELDS, SECTION_DEFS, SectionDef, FieldDef } from '@/lib/schema/field-schemas';
 import { FieldEditor, FieldState } from './FieldEditor';
 
 interface Props {
@@ -60,6 +60,18 @@ export default function ReviewClient({
   const [completed, setCompleted] = useState<boolean>(initialReview?.completed ?? false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(initialReview ? Date.now() : null);
+  const [showHelp, setShowHelp] = useState(false);
+
+  // Show help on first visit (per browser)
+  useEffect(() => {
+    try {
+      const seen = window.localStorage.getItem('seen-review-help');
+      if (!seen) {
+        setShowHelp(true);
+        window.localStorage.setItem('seen-review-help', '1');
+      }
+    } catch {}
+  }, []);
 
   // Total / approved counters for the header progress
   const { totalFields, approvedFields } = useMemo(() => {
@@ -77,10 +89,8 @@ export default function ReviewClient({
 
   // Debounced auto-save
   useEffect(() => {
-    if (savedAt === null && !initialReview) return; // first render: skip if nothing to save
-    const handle = setTimeout(() => {
-      void save(false);
-    }, 800);
+    if (savedAt === null && !initialReview) return;
+    const handle = setTimeout(() => { void save(false); }, 800);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
@@ -125,108 +135,134 @@ export default function ReviewClient({
     });
   }
 
-  // Sections to render: any descriptor section we have data for
   const presentSections: SectionDef[] = SECTION_DEFS.filter((s) => data.descriptors[s.key]);
 
   return (
-    <main className="min-h-screen">
+    <div className="min-h-screen bg-slate-50">
       {/* Sticky header */}
-      <header className="sticky top-0 z-10 bg-white border-b border-gray-200">
+      <header className="sticky top-0 z-20 bg-white border-b border-slate-200">
         <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center gap-4">
-          <Link href={`/review/${userId}`} className="text-sm text-blue-600 hover:underline whitespace-nowrap">
-            ← All trials
+          <Link
+            href={`/review/${userId}`}
+            className="text-sm text-blue-600 hover:text-blue-700 hover:underline whitespace-nowrap flex items-center gap-1"
+          >
+            <span>←</span> All trials
           </Link>
           <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-3">
-              <span className="font-mono text-sm text-gray-500">{trial.nctId}</span>
-              <span className="text-xs uppercase tracking-wide text-gray-400">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-xs text-slate-500">{trial.nctId}</span>
+              <span className="text-[10px] uppercase tracking-wider text-blue-700 bg-blue-100 px-2 py-0.5 rounded font-semibold">
                 {trial.assignedCancerType.replace(/_/g, ' ')}
               </span>
-              <span className="text-xs text-gray-400">· reviewing as {userName}</span>
+              {completed && (
+                <span className="text-[10px] uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-semibold">
+                  Done
+                </span>
+              )}
+              <span className="text-xs text-slate-400">· {userName}</span>
             </div>
-            <h1 className="text-base font-medium text-gray-900 truncate">{trial.briefTitle}</h1>
+            <h1 className="text-sm font-medium text-slate-900 truncate">{trial.briefTitle}</h1>
           </div>
-          <div className="text-xs text-gray-500 whitespace-nowrap">
-            {approvedFields} / {totalFields} approved
+          <div className="text-xs text-slate-500 whitespace-nowrap">
+            <span className="font-bold text-slate-900">{approvedFields}</span> / {totalFields} approved
           </div>
-          <div className="text-xs text-gray-400 w-32 text-right">
-            {saving ? 'Saving…' : savedAt ? `Saved ${new Date(savedAt).toLocaleTimeString()}` : 'Not saved'}
+          <div className="text-xs text-slate-400 w-32 text-right">
+            {saving ? (
+              <span className="text-blue-600">Saving…</span>
+            ) : savedAt ? (
+              `Saved ${new Date(savedAt).toLocaleTimeString()}`
+            ) : (
+              'Not saved'
+            )}
           </div>
+          <button
+            onClick={() => setShowHelp(true)}
+            className="w-7 h-7 rounded-full border border-slate-300 text-slate-600 hover:border-blue-500 hover:text-blue-600 transition text-sm font-semibold"
+            aria-label="How to review"
+            title="How to review"
+          >
+            ?
+          </button>
           <div className="flex gap-2">
             {prevNctId && (
               <Link
                 href={`/review/${userId}/${prevNctId}`}
-                className="text-sm px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50"
+                className="text-sm px-3 py-1.5 border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-blue-400 transition"
               >
                 ← Prev
               </Link>
             )}
             <button
               onClick={markDoneAndNext}
-              className="text-sm px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700"
+              className="text-sm px-4 py-1.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition font-medium shadow-sm shadow-blue-200"
             >
               {nextNctId ? 'Mark done & next →' : 'Mark done'}
             </button>
           </div>
         </div>
-        <div className="h-1 bg-gray-100">
+        <div className="h-1 bg-slate-100">
           <div
-            className="h-full bg-green-500 transition-all"
+            className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all"
             style={{ width: totalFields ? `${(approvedFields / totalFields) * 100}%` : '0%' }}
           />
         </div>
       </header>
 
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+
       <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-0 lg:gap-6 p-6">
         {/* Left: free text */}
         <div className="lg:sticky lg:top-[88px] lg:max-h-[calc(100vh-104px)] lg:overflow-y-auto">
-          <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-5">
-            <Section title="Title">
-              <p className="text-sm text-gray-900">{trial.briefTitle}</p>
-            </Section>
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm shadow-blue-100/30 p-6 space-y-5">
+            <SectionHeader>Title</SectionHeader>
+            <p className="text-sm text-slate-900 -mt-3">{trial.briefTitle}</p>
             {trial.conditions.length > 0 && (
-              <Section title="Conditions">
-                <p className="text-sm text-gray-900">{trial.conditions.join(', ')}</p>
-              </Section>
+              <>
+                <SectionHeader>Conditions</SectionHeader>
+                <p className="text-sm text-slate-900 -mt-3">{trial.conditions.join(', ')}</p>
+              </>
             )}
             {trial.interventions.length > 0 && (
-              <Section title="Interventions">
-                <p className="text-sm text-gray-900">{trial.interventions.join(', ')}</p>
-              </Section>
+              <>
+                <SectionHeader>Interventions</SectionHeader>
+                <p className="text-sm text-slate-900 -mt-3">{trial.interventions.join(', ')}</p>
+              </>
             )}
             {trial.briefSummary && (
-              <Section title="Brief summary">
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{trial.briefSummary}</p>
-              </Section>
+              <>
+                <SectionHeader>Brief summary</SectionHeader>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed -mt-3">{trial.briefSummary}</p>
+              </>
             )}
             {trial.detailedDescription && (
-              <Section title="Detailed description">
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{trial.detailedDescription}</p>
-              </Section>
+              <>
+                <SectionHeader>Detailed description</SectionHeader>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed -mt-3">{trial.detailedDescription}</p>
+              </>
             )}
-            <Section title="Eligibility criteria">
-              <pre className="text-xs text-gray-800 whitespace-pre-wrap font-mono leading-relaxed">
-                {trial.eligibilityRaw || '(none)'}
-              </pre>
-            </Section>
-            <Section title="CT.gov metadata">
-              <dl className="text-xs text-gray-700 grid grid-cols-2 gap-x-4 gap-y-1">
-                <dt className="text-gray-500">Status</dt><dd>{trial.overallStatus ?? '—'}</dd>
-                <dt className="text-gray-500">Study type</dt><dd>{trial.studyType ?? '—'}</dd>
-                <dt className="text-gray-500">Phases</dt><dd>{trial.phases?.join(', ') ?? '—'}</dd>
-                <dt className="text-gray-500">Sex (CT.gov)</dt><dd>{trial.ctGovSex ?? '—'}</dd>
-                <dt className="text-gray-500">Min age</dt><dd>{trial.ctGovMinAge ?? '—'}</dd>
-                <dt className="text-gray-500">Max age</dt><dd>{trial.ctGovMaxAge ?? '—'}</dd>
+            <SectionHeader>Eligibility criteria</SectionHeader>
+            <pre className="text-xs text-slate-800 whitespace-pre-wrap font-mono leading-relaxed bg-blue-50/60 border border-blue-100 rounded-xl p-4 -mt-3">
+              {trial.eligibilityRaw || '(none)'}
+            </pre>
+            <SectionHeader>CT.gov metadata</SectionHeader>
+            <div className="-mt-3">
+              <dl className="text-xs text-slate-700 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <Meta k="Status" v={trial.overallStatus} />
+                <Meta k="Study type" v={trial.studyType} />
+                <Meta k="Phases" v={trial.phases?.join(', ')} />
+                <Meta k="Sex (CT.gov)" v={trial.ctGovSex} />
+                <Meta k="Min age" v={trial.ctGovMinAge} />
+                <Meta k="Max age" v={trial.ctGovMaxAge} />
               </dl>
               <a
                 href={`https://clinicaltrials.gov/study/${trial.nctId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-blue-600 hover:underline mt-2 inline-block"
+                className="text-xs text-blue-600 hover:text-blue-700 hover:underline mt-3 inline-block"
               >
                 View on ClinicalTrials.gov →
               </a>
-            </Section>
+            </div>
           </div>
         </div>
 
@@ -234,6 +270,7 @@ export default function ReviewClient({
         <div className="space-y-4 mt-6 lg:mt-0">
           <FieldGroup
             title="Basic eligibility"
+            subtitle="Cancer types accepted, age, sex, ECOG, prior treatment"
             onApproveAll={() => approveAllInSection('basic')}
           >
             {Object.entries(BASIC_FIELDS).map(([key, def]) => {
@@ -257,6 +294,7 @@ export default function ReviewClient({
             <FieldGroup
               key={section.key}
               title={section.label}
+              subtitle="Cancer-specific clinical descriptors"
               onApproveAll={() => approveAllInSection(section.key)}
             >
               {Object.entries(section.fields).map(([fieldKey, def]) => {
@@ -284,40 +322,121 @@ export default function ReviewClient({
           ))}
 
           {presentSections.length === 0 && (
-            <div className="text-sm text-gray-500 bg-white border border-gray-200 rounded-lg p-5">
+            <div className="text-sm text-slate-500 bg-white border border-slate-200 rounded-2xl p-6">
               No cancer-specific descriptors extracted for this trial.
             </div>
           )}
+
+          {/* Bottom action bar — duplicate of header for ergonomics */}
+          <div className="flex justify-end gap-2 pt-2">
+            {prevNctId && (
+              <Link
+                href={`/review/${userId}/${prevNctId}`}
+                className="text-sm px-4 py-2 border border-slate-300 rounded-lg hover:bg-white hover:border-blue-400 transition bg-white/50"
+              >
+                ← Prev
+              </Link>
+            )}
+            <button
+              onClick={markDoneAndNext}
+              className="text-sm px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition font-medium shadow-sm shadow-blue-200"
+            >
+              {nextNctId ? 'Mark done & next →' : 'Mark done'}
+            </button>
+          </div>
         </div>
       </div>
-    </main>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">{title}</div>
-      {children}
     </div>
   );
 }
 
-function FieldGroup({
-  title, children, onApproveAll,
-}: { title: string; children: React.ReactNode; onApproveAll: () => void }) {
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">{children}</div>;
+}
+
+function Meta({ k, v }: { k: string; v: string | undefined | null }) {
   return (
-    <section className="bg-white border border-gray-200 rounded-lg">
-      <header className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-        <h3 className="font-semibold text-gray-900">{title}</h3>
+    <>
+      <dt className="text-slate-500">{k}</dt>
+      <dd className="text-slate-800">{v || '—'}</dd>
+    </>
+  );
+}
+
+function FieldGroup({
+  title, subtitle, children, onApproveAll,
+}: { title: string; subtitle?: string; children: React.ReactNode; onApproveAll: () => void }) {
+  return (
+    <section className="bg-white border border-slate-200 rounded-2xl shadow-sm shadow-blue-100/30">
+      <header className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+        <div>
+          <h3 className="font-semibold text-slate-900">{title}</h3>
+          {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+        </div>
         <button
           onClick={onApproveAll}
-          className="text-xs text-gray-600 hover:text-green-700 hover:underline"
+          className="text-xs text-blue-600 hover:text-blue-700 hover:underline font-medium whitespace-nowrap"
         >
-          Approve all
+          Approve all ✓
         </button>
       </header>
-      <div className="px-5 py-3 divide-y divide-gray-100">{children}</div>
+      <div className="px-5 py-2 divide-y divide-slate-100">{children}</div>
     </section>
+  );
+}
+
+function HelpModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-30 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 lg:p-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-xl font-bold text-slate-900 mb-1">How to review a trial</h2>
+        <p className="text-sm text-slate-500 mb-5">Quick reference — you can reopen this with the ? button.</p>
+
+        <ol className="space-y-3 text-sm text-slate-700">
+          <Tip n={1}>
+            <strong>Read the trial text on the left.</strong> Focus on the eligibility criteria — that&apos;s
+            what the LLM extracted from.
+          </Tip>
+          <Tip n={2}>
+            <strong>For each field on the right:</strong> if the LLM&apos;s value matches the eligibility text,
+            click the green checkbox to approve it.
+          </Tip>
+          <Tip n={3}>
+            <strong>If the value is wrong:</strong> change it inline (dropdown, multi-select chips, yes/no, or number).
+            An <span className="text-amber-600 font-semibold">EDITED</span> badge will appear.
+          </Tip>
+          <Tip n={4}>
+            <strong>Use &quot;Approve all&quot;</strong> on a section header when the LLM nailed everything.
+          </Tip>
+          <Tip n={5}>
+            <strong>Click &quot;Mark done &amp; next →&quot;</strong> to advance. Edits auto-save every ~1s.
+          </Tip>
+        </ol>
+
+        <button
+          onClick={onClose}
+          className="mt-6 w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+        >
+          Got it
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Tip({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <li className="flex gap-3">
+      <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
+        {n}
+      </span>
+      <span className="leading-relaxed">{children}</span>
+    </li>
   );
 }
