@@ -96,16 +96,43 @@ export default function ReviewClient({
   // Skip the very first effect run (mount) — without skipping every save on a brand-new trial.
   const skipNextSaveRef = useRef(true);
 
-  // Debounced auto-save on every data change after mount
+  // Save on every data change, with a small debounce (200ms) so multi-keystroke
+  // edits in number inputs coalesce into one POST.
   useEffect(() => {
     if (skipNextSaveRef.current) {
       skipNextSaveRef.current = false;
       return;
     }
-    const handle = setTimeout(() => { void save(false); }, 600);
+    const handle = setTimeout(() => { void save(false); }, 200);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
+
+  // Safety net for cases we can't intercept: browser back/forward, tab close,
+  // refresh, navigate to external URL. sendBeacon fires a non-blocking POST
+  // that the browser delivers even as the page is being torn down.
+  useEffect(() => {
+    function flushBeacon() {
+      try {
+        const body = JSON.stringify({
+          userId,
+          nctId: trial.nctId,
+          reviewedData: dataRef.current,
+          completed: completedRef.current,
+        });
+        navigator.sendBeacon('/api/reviews', new Blob([body], { type: 'application/json' }));
+      } catch {}
+    }
+    window.addEventListener('beforeunload', flushBeacon);
+    window.addEventListener('pagehide', flushBeacon);
+    return () => {
+      window.removeEventListener('beforeunload', flushBeacon);
+      window.removeEventListener('pagehide', flushBeacon);
+      // Also fire on React unmount (covers Next.js client-side route changes
+      // including the browser back arrow when popstate triggers a re-render).
+      flushBeacon();
+    };
+  }, [userId, trial.nctId]);
 
   async function save(markCompleted: boolean) {
     setSaving(true);
