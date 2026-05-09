@@ -312,65 +312,81 @@ export default function ReviewClient({
         </div>
 
         {/* Right: extracted variables */}
-        <div className="space-y-4 mt-6 lg:mt-0">
-          <FieldGroup
-            title="Basic eligibility"
-            subtitle="Cancer types accepted, age, sex, ECOG, prior treatment"
-            onApproveAll={() => approveAllInSection('basic')}
-          >
-            {Object.entries(BASIC_FIELDS).map(([key, def]) => {
-              const original = (trial.basicFields as any)?.[key] ?? null;
-              const state = data.basic[key] ?? makeFieldState(original);
-              return (
-                <FieldEditor
-                  key={key}
-                  def={def as FieldDef}
-                  state={state}
-                  original={original}
-                  onChange={(next) =>
-                    setData((d) => ({ ...d, basic: { ...d.basic, [key]: next } }))
-                  }
-                />
-              );
-            })}
-          </FieldGroup>
-
-          {presentSections.map((section) => (
+        <div className="space-y-8 mt-6 lg:mt-0">
+          {/* Section 1: Top-level eligibility */}
+          <div>
+            <SectionDivider
+              n={1}
+              title="Top-level eligibility"
+              subtitle="Cancer types accepted, age, sex, ECOG, prior treatment"
+            />
             <FieldGroup
-              key={section.key}
-              title={section.label}
-              subtitle="Cancer-specific clinical descriptors"
-              onApproveAll={() => approveAllInSection(section.key)}
+              title="Basic eligibility"
+              onApproveAll={() => approveAllInSection('basic')}
             >
-              {Object.entries(section.fields).map(([fieldKey, def]) => {
-                const original = ((trial.descriptors ?? {})[section.key] as any)?.[fieldKey] ?? null;
-                const state = data.descriptors[section.key]?.[fieldKey] ?? makeFieldState(original);
+              {Object.entries(BASIC_FIELDS).map(([key, def]) => {
+                const original = (trial.basicFields as any)?.[key] ?? null;
+                const state = data.basic[key] ?? makeFieldState(original);
                 return (
                   <FieldEditor
-                    key={fieldKey}
-                    def={def}
+                    key={key}
+                    def={def as FieldDef}
                     state={state}
                     original={original}
                     onChange={(next) =>
-                      setData((d) => ({
-                        ...d,
-                        descriptors: {
-                          ...d.descriptors,
-                          [section.key]: { ...d.descriptors[section.key], [fieldKey]: next },
-                        },
-                      }))
+                      setData((d) => ({ ...d, basic: { ...d.basic, [key]: next } }))
                     }
                   />
                 );
               })}
             </FieldGroup>
-          ))}
+          </div>
 
-          {presentSections.length === 0 && (
-            <div className="text-sm text-slate-500 bg-white border border-slate-200 rounded-2xl p-6">
-              No cancer-specific descriptors extracted for this trial.
-            </div>
-          )}
+          {/* Section 2: Cancer-specific descriptors */}
+          <div>
+            <SectionDivider
+              n={2}
+              title="Cancer-specific descriptors"
+              subtitle="Histology, biomarkers, staging, and prior-therapy detail per cancer type"
+            />
+            {presentSections.length === 0 ? (
+              <div className="text-sm text-slate-500 bg-white border border-slate-200 rounded-2xl p-6">
+                No cancer-specific descriptors extracted for this trial.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {presentSections.map((section) => (
+                  <FieldGroup
+                    key={section.key}
+                    title={section.label}
+                    onApproveAll={() => approveAllInSection(section.key)}
+                  >
+                    {Object.entries(section.fields).map(([fieldKey, def]) => {
+                      const original = ((trial.descriptors ?? {})[section.key] as any)?.[fieldKey] ?? null;
+                      const state = data.descriptors[section.key]?.[fieldKey] ?? makeFieldState(original);
+                      return (
+                        <FieldEditor
+                          key={fieldKey}
+                          def={def}
+                          state={state}
+                          original={original}
+                          onChange={(next) =>
+                            setData((d) => ({
+                              ...d,
+                              descriptors: {
+                                ...d.descriptors,
+                                [section.key]: { ...d.descriptors[section.key], [fieldKey]: next },
+                              },
+                            }))
+                          }
+                        />
+                      );
+                    })}
+                  </FieldGroup>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Bottom action bar — duplicate of header for ergonomics */}
           <div className="flex justify-end gap-2 pt-2">
@@ -397,6 +413,20 @@ export default function ReviewClient({
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">{children}</div>;
+}
+
+function SectionDivider({ n, title, subtitle }: { n: number; title: string; subtitle: string }) {
+  return (
+    <div className="flex items-center gap-3 mb-3 px-1">
+      <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center text-xs font-bold shadow-sm shadow-blue-200">
+        {n}
+      </div>
+      <div className="flex-1">
+        <h2 className="text-base font-bold text-slate-900 leading-tight">{title}</h2>
+        <p className="text-xs text-slate-500 leading-tight mt-0.5">{subtitle}</p>
+      </div>
+    </div>
+  );
 }
 
 function Meta({ k, v }: { k: string; v: string | undefined | null }) {
