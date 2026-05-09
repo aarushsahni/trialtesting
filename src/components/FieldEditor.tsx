@@ -18,7 +18,8 @@ interface Props {
 export function FieldEditor({ def, state, original, onChange }: Props) {
   const setValue = (v: unknown) => {
     const edited = JSON.stringify(v ?? null) !== JSON.stringify(original ?? null);
-    onChange({ ...state, value: v, edited });
+    // Editing a value implies approval — the user is explicitly endorsing the new value.
+    onChange({ ...state, value: v, edited, approved: true });
   };
   const toggleApproved = () => onChange({ ...state, approved: !state.approved });
 
