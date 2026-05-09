@@ -9,9 +9,9 @@ export class ClinicalTrialsAPI {
   private rateLimiter = createCTGovRateLimiter();
 
   /**
-   * Fetch up to N completed INTERVENTIONAL trials (phase 1-4) matching a condition.
+   * Fetch up to N completed INTERVENTIONAL trials matching a condition.
    * Filters out observational, community-health, registry, and validation studies —
-   * none of which the eligibility extractors are designed for.
+   * none of which the eligibility extractors are designed for. No phase restriction.
    */
   async fetchCompletedByCondition(condition: string, limit: number): Promise<CTGovStudy[]> {
     const results: CTGovStudy[] = [];
@@ -22,9 +22,7 @@ export class ClinicalTrialsAPI {
       const remaining = limit - results.length;
       const params = new URLSearchParams({
         'query.cond': condition,
-        'query.term':
-          'AREA[StudyType]INTERVENTIONAL AND ' +
-          'AREA[Phase](PHASE1 OR PHASE2 OR PHASE3 OR PHASE4)',
+        'query.term': 'AREA[StudyType]INTERVENTIONAL',
         'filter.overallStatus': 'COMPLETED',
         pageSize: String(Math.min(remaining, 50)),
         countTotal: 'true',
