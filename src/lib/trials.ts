@@ -1,18 +1,11 @@
-// Server-side trial loader. Reads data/trials.json once.
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+// Server-side trial loader. Imports data/trials.json statically so Next.js
+// bundles it into the serverless function — works on Vercel without any
+// runtime file-system access.
+import trialsData from '../../data/trials.json';
 import { TrialsDataFile, ExtractedTrial } from './types';
 
-let cached: TrialsDataFile | null = null;
-
 export function loadTrialsFile(): TrialsDataFile {
-  if (cached) return cached;
-  const path = join(process.cwd(), 'data', 'trials.json');
-  if (!existsSync(path)) {
-    return { generatedAt: '', model: '', trials: [] };
-  }
-  cached = JSON.parse(readFileSync(path, 'utf8')) as TrialsDataFile;
-  return cached;
+  return trialsData as unknown as TrialsDataFile;
 }
 
 export function getTrial(nctId: string): ExtractedTrial | undefined {
