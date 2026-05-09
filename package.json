@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "fetch": "tsx scripts/fetch-and-extract.ts",
+    "recover": "tsx scripts/extract-from-checkpoints.ts",
     "init-db": "tsx scripts/init-db.ts"
   },
   "dependencies": {

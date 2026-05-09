@@ -378,8 +378,11 @@ Only include keys for the cancer types specified in TARGET CANCER TYPES.`;
 
 export class ClinicalDescriptorExtractor {
   private openai: OpenAI;
+  // Per-request timeout: high-reasoning calls occasionally hang on the longest
+  // trials. 120s is generous for high reasoning + JSON output but bounded so
+  // one bad trial can't stall the whole batch.
   constructor(private model: string) {
-    this.openai = new OpenAI();
+    this.openai = new OpenAI({ timeout: 120_000, maxRetries: 1 });
   }
 
   async extractFromTrial(trial: TrialForDescriptorExtraction): Promise<ClinicalDescriptors> {

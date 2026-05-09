@@ -54,7 +54,7 @@ Respond with ONLY valid JSON matching this schema:
 export class StructuredEligibilityExtractor {
   private openai: OpenAI;
   constructor(private model: string) {
-    this.openai = new OpenAI();
+    this.openai = new OpenAI({ timeout: 120_000, maxRetries: 1 });
   }
 
   async extractFromTrial(trial: ProcessedTrial): Promise<StructuredEligibilityFields> {
