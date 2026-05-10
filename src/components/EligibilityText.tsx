@@ -111,7 +111,7 @@ export function EligibilityText({ raw }: { raw: string }) {
           return (
             <h4
               key={i}
-              className="text-xs font-bold uppercase tracking-wider text-blue-800 mt-4 first:mt-0 pb-1 border-b border-blue-200/80"
+              className="text-base font-bold text-blue-900 mt-6 first:mt-0 pb-2 border-b-2 border-blue-300"
             >
               {b.text}
             </h4>
