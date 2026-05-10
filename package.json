@@ -9,6 +9,7 @@
     "lint": "next lint",
     "fetch": "tsx scripts/fetch-and-extract.ts",
     "recover": "tsx scripts/extract-from-checkpoints.ts",
+    "topup": "tsx scripts/topup.ts",
     "init-db": "tsx scripts/init-db.ts"
   },
   "dependencies": {
