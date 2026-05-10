@@ -68,6 +68,30 @@ function parse(raw: string): B[] {
   return blocks;
 }
 
+// Turn inline "[8 weeks]" / "[12 courses]" CT.gov annotations into subtle pills
+// so they don't disrupt the prose.
+function renderInline(text: string): (string | React.ReactElement)[] {
+  const parts: (string | React.ReactElement)[] = [];
+  const re = /\[([^\[\]]{1,40})\]/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let i = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(
+      <span
+        key={i++}
+        className="inline-block px-1.5 py-0.5 mx-0.5 bg-slate-100 text-slate-600 text-[11px] font-medium rounded align-baseline"
+      >
+        {m[1]}
+      </span>,
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts.length > 0 ? parts : [text];
+}
+
 export function EligibilityText({ raw }: { raw: string }) {
   if (!raw || !raw.trim()) {
     return <p className="text-sm text-slate-400 italic">No eligibility criteria provided.</p>;
@@ -90,7 +114,7 @@ export function EligibilityText({ raw }: { raw: string }) {
         if (b.kind === 'para') {
           return (
             <p key={i} className="text-slate-800">
-              {b.text}
+              {renderInline(b.text)}
             </p>
           );
         }
@@ -106,7 +130,7 @@ export function EligibilityText({ raw }: { raw: string }) {
                 <span className="text-blue-500 select-none flex-shrink-0">
                   {it.indent === 0 ? '•' : '◦'}
                 </span>
-                <span className="text-slate-800">{it.text}</span>
+                <span className="text-slate-800">{renderInline(it.text)}</span>
               </li>
             ))}
           </ul>
