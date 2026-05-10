@@ -61,6 +61,7 @@ export default function ReviewClient({
   const [completed, setCompleted] = useState<boolean>(initialReview?.completed ?? false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(initialReview ? Date.now() : null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
 
   // Show help on first visit (per browser)
@@ -138,7 +139,7 @@ export default function ReviewClient({
   async function save(markCompleted: boolean) {
     setSaving(true);
     try {
-      await fetch('/api/reviews', {
+      const res = await fetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -148,23 +149,37 @@ export default function ReviewClient({
           completed: markCompleted || completedRef.current,
         }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSavedAt(Date.now());
+      setSaveError(null);
       if (markCompleted) setCompleted(true);
+    } catch (e) {
+      setSaveError((e as Error).message || 'Save failed');
+      throw e; // let saveAndGo / markDoneAndNext know not to navigate
     } finally {
       setSaving(false);
     }
   }
 
-  // Save before navigating away — used by Prev / Next / "All trials" links
+  // Save before navigating away — used by Prev / Next / "All trials" links.
+  // If the save fails we do NOT navigate so the user can retry without losing edits.
   async function saveAndGo(href: string) {
-    await save(false);
-    router.push(href);
+    try {
+      await save(false);
+      router.push(href);
+    } catch {
+      // saveError state is already set by save(); banner will appear
+    }
   }
 
   async function markDoneAndNext() {
-    await save(true);
-    if (nextNctId) router.push(`/review/${userId}/${nextNctId}`);
-    else router.push(`/review/${userId}`);
+    try {
+      await save(true);
+      if (nextNctId) router.push(`/review/${userId}/${nextNctId}`);
+      else router.push(`/review/${userId}`);
+    } catch {
+      // saveError state is already set; do not navigate
+    }
   }
 
   function approveAllInSection(sectionKey: string | 'basic') {
@@ -212,13 +227,15 @@ export default function ReviewClient({
           <div className="text-xs text-slate-500 whitespace-nowrap">
             <span className="font-bold text-slate-900">{approvedFields}</span> / {totalFields} approved
           </div>
-          <div className="text-xs text-slate-400 w-32 text-right">
-            {saving ? (
+          <div className="text-xs w-32 text-right">
+            {saveError ? (
+              <span className="text-red-600 font-semibold">⚠ Save failed</span>
+            ) : saving ? (
               <span className="text-blue-600">Saving…</span>
             ) : savedAt ? (
-              `Saved ${new Date(savedAt).toLocaleTimeString()}`
+              <span className="text-slate-400">Saved {new Date(savedAt).toLocaleTimeString()}</span>
             ) : (
-              'Not saved'
+              <span className="text-slate-400">Not saved</span>
             )}
           </div>
           <button
@@ -252,6 +269,20 @@ export default function ReviewClient({
             style={{ width: totalFields ? `${(approvedFields / totalFields) * 100}%` : '0%' }}
           />
         </div>
+        {saveError && (
+          <div className="bg-red-50 border-t border-red-200 px-6 py-2 flex items-center justify-between gap-4 text-sm">
+            <span className="text-red-800">
+              <strong>Couldn&apos;t save your last change</strong> ({saveError}). Your edits are
+              still in memory — click retry, or check your connection.
+            </span>
+            <button
+              onClick={() => { void save(false); }}
+              className="px-3 py-1 text-xs font-medium bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Retry save
+            </button>
+          </div>
+        )}
       </header>
 
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
