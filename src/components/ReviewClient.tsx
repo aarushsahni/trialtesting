@@ -277,13 +277,17 @@ export default function ReviewClient({
             {trial.briefSummary && (
               <>
                 <SectionHeader>Brief summary</SectionHeader>
-                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed -mt-3">{trial.briefSummary}</p>
+                <div className="-mt-3">
+                  <EligibilityText raw={trial.briefSummary} />
+                </div>
               </>
             )}
             {trial.detailedDescription && (
               <>
                 <SectionHeader>Detailed description</SectionHeader>
-                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed -mt-3">{trial.detailedDescription}</p>
+                <div className="-mt-3">
+                  <EligibilityText raw={trial.detailedDescription} />
+                </div>
               </>
             )}
             <SectionHeader>Eligibility criteria</SectionHeader>

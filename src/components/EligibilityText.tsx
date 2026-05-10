@@ -9,8 +9,14 @@ type B =
   | { kind: 'list'; items: { text: string; indent: number }[] }
   | { kind: 'para'; text: string };
 
+// CT.gov text often contains markdown-escape characters like "\[" / "\<".
+// Strip them so they render as the intended literal character.
+function cleanText(s: string): string {
+  return s.replace(/\\([\[\]<>*_~`\\])/g, '$1');
+}
+
 function parse(raw: string): B[] {
-  const lines = raw.split(/\r?\n/);
+  const lines = cleanText(raw).split(/\r?\n/);
   const blocks: B[] = [];
   let buffer: { text: string; indent: number }[] = [];
   let para: string[] = [];
