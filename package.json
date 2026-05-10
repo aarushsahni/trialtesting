@@ -11,6 +11,7 @@
     "recover": "tsx scripts/extract-from-checkpoints.ts",
     "topup": "tsx scripts/topup.ts",
     "refill": "tsx scripts/refill-empty-descriptors.ts",
+    "scrub": "tsx scripts/scrub-and-refill.ts",
     "init-db": "tsx scripts/init-db.ts"
   },
   "dependencies": {
