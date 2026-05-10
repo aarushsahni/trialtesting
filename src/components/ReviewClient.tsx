@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ExtractedTrial } from '@/lib/types';
 import { BASIC_FIELDS, SECTION_DEFS, SectionDef, FieldDef } from '@/lib/schema/field-schemas';
 import { FieldEditor, FieldState } from './FieldEditor';
+import { EligibilityText } from './EligibilityText';
 
 interface Props {
   userId: string;
@@ -286,9 +287,9 @@ export default function ReviewClient({
               </>
             )}
             <SectionHeader>Eligibility criteria</SectionHeader>
-            <pre className="text-xs text-slate-800 whitespace-pre-wrap font-mono leading-relaxed bg-blue-50/60 border border-blue-100 rounded-xl p-4 -mt-3">
-              {trial.eligibilityRaw || '(none)'}
-            </pre>
+            <div className="-mt-3">
+              <EligibilityText raw={trial.eligibilityRaw || ''} />
+            </div>
             <SectionHeader>CT.gov metadata</SectionHeader>
             <div className="-mt-3">
               <dl className="text-xs text-slate-700 grid grid-cols-2 gap-x-4 gap-y-1.5">
