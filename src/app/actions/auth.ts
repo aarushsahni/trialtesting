@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import {
+  annotatorPasskeyConfigured,
   annotatorPasskeyMatches,
   clearSession,
   compareDob,
@@ -36,6 +37,12 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
   if (!dob) return { ok: false, error: 'Date of birth must be MM/DD/YYYY.' };
 
   if (role === 'annotator') {
+    if (!annotatorPasskeyConfigured()) {
+      return {
+        ok: false,
+        error: 'Annotator signup is not configured on this server (ANNOTATOR_PASSKEY env var not set). Ask the project lead.',
+      };
+    }
     if (!passkey) return { ok: false, error: 'Annotator passkey required.' };
     if (!annotatorPasskeyMatches(passkey)) {
       return { ok: false, error: 'Incorrect annotator passkey.' };

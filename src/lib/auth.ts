@@ -46,9 +46,13 @@ export async function compareDob(dob: string, hash: string): Promise<boolean> {
 // Passkey check (annotator role gate)
 // ──────────────────────────────────────────────────────────────────────────
 
+export function annotatorPasskeyConfigured(): boolean {
+  return !!process.env.ANNOTATOR_PASSKEY;
+}
+
 export function annotatorPasskeyMatches(input: string): boolean {
   const expected = process.env.ANNOTATOR_PASSKEY;
-  if (!expected) throw new Error('ANNOTATOR_PASSKEY not set in .env.local');
+  if (!expected) return false;
   return input.trim() === expected;
 }
 
