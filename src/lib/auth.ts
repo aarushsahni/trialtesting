@@ -9,11 +9,14 @@ import { query, UserRole, UserRow } from './db';
 const COOKIE = 'qual_session';
 const ALG = 'HS256';
 
-function secret(): Uint8Array {
-  const s = process.env.SESSION_SECRET;
-  if (!s) throw new Error('SESSION_SECRET not set in .env.local');
-  return new TextEncoder().encode(s);
-}
+// Hardcoded session-signing key. The threat model is small (a handful of
+// trusted reviewers); knowing this value lets you forge session cookies, so
+// if the source ever becomes public for a higher-stakes deployment, replace
+// this with an env-var read or rotate it.
+const SESSION_KEY = new TextEncoder().encode(
+  'tempo-qualification-internal-session-key-9f4e2a3c7b1d8e2f-do-not-share',
+);
+function secret(): Uint8Array { return SESSION_KEY; }
 
 // ──────────────────────────────────────────────────────────────────────────
 // DOB normalization + hashing
