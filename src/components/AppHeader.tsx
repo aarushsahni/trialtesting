@@ -30,6 +30,12 @@ export function AppHeader({ name, role }: Props) {
           >
             Annotation guide
           </Link>
+          <Link
+            href="/account"
+            className="text-xs text-slate-500 hover:text-slate-900 hover:underline"
+          >
+            Account
+          </Link>
           <form action={logoutAction}>
             <button
               type="submit"

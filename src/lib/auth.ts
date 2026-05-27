@@ -149,3 +149,21 @@ export async function createUser(opts: {
   );
   return rows[0];
 }
+
+export async function updateUserName(userId: string, name: string): Promise<UserRow | null> {
+  const rows = await query<UserRow>(
+    `UPDATE users SET name = $1 WHERE id = $2 RETURNING *`,
+    [name, userId],
+  );
+  return rows[0] ?? null;
+}
+
+export async function updateUserDob(userId: string, dob: string): Promise<void> {
+  const hash = await hashDob(dob);
+  await query(`UPDATE users SET dob_hash = $1 WHERE id = $2`, [hash, userId]);
+}
+
+export async function getUserById(userId: string): Promise<UserRow | null> {
+  const rows = await query<UserRow>(`SELECT * FROM users WHERE id = $1`, [userId]);
+  return rows[0] ?? null;
+}
