@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { logoutAction } from '@/app/actions/auth';
 
 interface Props {
@@ -22,14 +23,22 @@ export function AppHeader({ name, role }: Props) {
             </div>
           </div>
         </div>
-        <form action={logoutAction}>
-          <button
-            type="submit"
+        <div className="flex items-center gap-4">
+          <Link
+            href="/guide"
             className="text-xs text-slate-500 hover:text-slate-900 hover:underline"
           >
-            Sign out
-          </button>
-        </form>
+            Annotation guide
+          </Link>
+          <form action={logoutAction}>
+            <button
+              type="submit"
+              className="text-xs text-slate-500 hover:text-slate-900 hover:underline"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
       </div>
     </header>
   );

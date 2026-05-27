@@ -41,6 +41,7 @@ export default async function ReviewerTrialPage({
 
   const allAnswers = (attempt.answers ?? {}) as Record<string, TrialAnswers>;
   const initial: TrialAnswers = allAnswers[nctId] ?? {};
+  const initialMeta = (attempt.per_trial_meta ?? {})[nctId] ?? { notes: '', flags: {} };
 
   const allIds = set.trial_nct_ids;
   const idx = allIds.indexOf(nctId);
@@ -73,6 +74,7 @@ export default async function ReviewerTrialPage({
       allAnswers={allAnswers}
       initialForTrial={initial}
       initialComplete={(attempt.completed_nct_ids ?? []).includes(nctId)}
+      initialMeta={initialMeta}
       prevNctId={prevNctId}
       nextNctId={nextNctId}
     />

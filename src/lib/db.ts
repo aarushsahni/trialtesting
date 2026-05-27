@@ -76,9 +76,16 @@ export interface ReferenceKeyRow {
   nct_id: string;
   schema_version_id: string;
   key_data: Record<string, unknown>;
+  notes: string;
+  flags: Record<string, boolean>;
   complete: boolean;
   built_by_annotator_id: string | null;
   built_at: string;
+}
+
+export interface PerTrialMeta {
+  notes: string;
+  flags: Record<string, boolean>;
 }
 
 export type AttemptStatus = 'in_progress' | 'submitted' | 'passed' | 'failed';
@@ -89,6 +96,7 @@ export interface QualificationAttemptRow {
   qualification_set_id: string;
   schema_version_id: string;
   answers: Record<string, unknown>;
+  per_trial_meta: Record<string, PerTrialMeta>;
   completed_nct_ids: string[];
   status: AttemptStatus;
   score_data: Record<string, unknown> | null;

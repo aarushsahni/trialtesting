@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { logoutAction } from '@/app/actions/auth';
-import { markReferenceKeyCompleteAction, saveReferenceKeyAction } from '@/app/actions/annotate';
+import { markReferenceKeyCompleteAction, saveReferenceKeyAction, saveReferenceKeyMetaAction } from '@/app/actions/annotate';
 import { EligibilityText } from '@/components/EligibilityText';
 import { BlockSection } from '@/components/BlockSection';
 import { MarkCompleteToggle } from '@/components/MarkCompleteToggle';
+import { TrialMeta, TrialMetaValue } from '@/components/TrialMeta';
 import { BLOCKS } from '@/lib/schema/field-schemas';
 import { BlockAnswers, BlockKey, FieldValue, TrialAnswers } from '@/lib/types';
 
@@ -33,12 +34,13 @@ interface Props {
   blocks: BlockKey[];
   initial: TrialAnswers;
   initialComplete: boolean;
+  initialMeta: TrialMetaValue;
   prevNctId: string | null;
   nextNctId: string | null;
 }
 
 export function ReferenceKeyEditor({
-  session, setId, setName, setLocked, trial, blocks, initial, initialComplete,
+  session, setId, setName, setLocked, trial, blocks, initial, initialComplete, initialMeta,
   prevNctId, nextNctId,
 }: Props) {
   const router = useRouter();
@@ -161,6 +163,9 @@ export function ReferenceKeyEditor({
               <span className="text-slate-400">Not saved</span>
             )}
           </div>
+          <a href="/guide" target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 hover:text-slate-900 hover:underline whitespace-nowrap">
+            Guide ↗
+          </a>
           <form action={logoutAction}>
             <button type="submit" className="text-xs text-slate-500 hover:text-slate-900 hover:underline">Sign out</button>
           </form>
@@ -248,6 +253,13 @@ export function ReferenceKeyEditor({
               disabled={setLocked}
             />
           ))}
+          <TrialMeta
+            initial={initialMeta}
+            disabled={setLocked}
+            onSave={(next) => saveReferenceKeyMetaAction({
+              setId, nctId: trial.nctId, notes: next.notes, flags: next.flags,
+            })}
+          />
           <MarkCompleteToggle
             complete={initialComplete}
             disabled={setLocked}

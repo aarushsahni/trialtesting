@@ -42,6 +42,36 @@ export async function saveReferenceKeyAction(opts: {
   return { ok: true };
 }
 
+// Save notes + flags for a reference key. Trial must belong to the set
+// and set must not be locked.
+export async function saveReferenceKeyMetaAction(opts: {
+  setId: string; nctId: string; notes: string; flags: Record<string, boolean>;
+}): Promise<ActionResult> {
+  let session;
+  try { session = await requireSession('annotator'); }
+  catch { return { ok: false, error: 'Not signed in as annotator.' }; }
+
+  const sets = await query<{ schema_version_id: string; locked_at: string | null }>(
+    `SELECT schema_version_id, locked_at FROM qualification_sets WHERE id = $1`,
+    [opts.setId],
+  );
+  if (!sets[0]) return { ok: false, error: 'Set not found.' };
+  if (sets[0].locked_at) return { ok: false, error: 'Set is locked.' };
+
+  // Upsert: if no reference key row exists yet, create an empty one with the meta
+  await query(
+    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, notes, flags, built_by_annotator_id, built_at)
+     VALUES ($1, $2, $3, '{}'::jsonb, $4, $5::jsonb, $6, NOW())
+     ON CONFLICT (qualification_set_id, nct_id) DO UPDATE
+       SET notes = EXCLUDED.notes,
+           flags = EXCLUDED.flags,
+           built_by_annotator_id = EXCLUDED.built_by_annotator_id,
+           built_at = NOW()`,
+    [opts.setId, opts.nctId, sets[0].schema_version_id, opts.notes, JSON.stringify(opts.flags), session.userId],
+  );
+  return { ok: true };
+}
+
 // Mark a reference key as complete (or un-complete). Editing complete=true
 // reference keys is still allowed until the set itself is locked.
 export async function markReferenceKeyCompleteAction(opts: {
@@ -75,6 +105,19 @@ export async function markReferenceKeyCompleteAction(opts: {
       [opts.setId, opts.nctId, sv[0].schema_version_id, opts.complete],
     );
   }
+  return { ok: true };
+}
+
+// Wipe a reviewer's attempt entirely. They can retake from scratch.
+export async function resetAttemptAction(attemptId: string): Promise<ActionResult> {
+  try { await requireSession('annotator'); }
+  catch { return { ok: false, error: 'Not signed in as annotator.' }; }
+
+  const r = await query<{ id: string }>(
+    `DELETE FROM qualification_attempts WHERE id = $1 RETURNING id`,
+    [attemptId],
+  );
+  if (r.length === 0) return { ok: false, error: 'Attempt not found.' };
   return { ok: true };
 }
 

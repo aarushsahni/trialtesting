@@ -35,6 +35,10 @@ export default async function ReferenceKeyPage({
 
   const initial = (keys[0]?.key_data ?? {}) as TrialAnswers;
   const initialComplete = keys[0]?.complete ?? false;
+  const initialMeta = {
+    notes: keys[0]?.notes ?? '',
+    flags: keys[0]?.flags ?? {},
+  };
 
   return (
     <ReferenceKeyEditor
@@ -60,6 +64,7 @@ export default async function ReferenceKeyPage({
       blocks={trial.assigned_blocks as BlockKey[]}
       initial={initial}
       initialComplete={initialComplete}
+      initialMeta={initialMeta}
       prevNctId={prevNctId}
       nextNctId={nextNctId}
     />

@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { logoutAction } from '@/app/actions/auth';
-import { markTrialCompleteAction, saveAttemptAction } from '@/app/actions/review';
+import { markTrialCompleteAction, saveAttemptAction, saveAttemptMetaAction } from '@/app/actions/review';
 import { EligibilityText } from '@/components/EligibilityText';
 import { BlockSection } from '@/components/BlockSection';
 import { MarkCompleteToggle } from '@/components/MarkCompleteToggle';
+import { TrialMeta, TrialMetaValue } from '@/components/TrialMeta';
+import { HelpModal } from '@/components/HelpModal';
 import { BLOCKS } from '@/lib/schema/field-schemas';
 import { BlockAnswers, BlockKey, FieldValue, TrialAnswers } from '@/lib/types';
 
@@ -35,13 +37,14 @@ interface Props {
   allAnswers: Record<string, TrialAnswers>;
   initialForTrial: TrialAnswers;
   initialComplete: boolean;
+  initialMeta: TrialMetaValue;
   prevNctId: string | null;
   nextNctId: string | null;
 }
 
 export function AttemptEditor({
   session, setId, setName, attemptId, submitted, trial, blocks,
-  allAnswers: initialAllAnswers, initialComplete, prevNctId, nextNctId,
+  allAnswers: initialAllAnswers, initialComplete, initialMeta, prevNctId, nextNctId,
 }: Props) {
   const router = useRouter();
   // Whole-attempt state lives client-side. Per-trial edits go through this map.
@@ -128,6 +131,7 @@ export function AttemptEditor({
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {!submitted && <HelpModal storageKey="reviewer-help-v1" />}
       <header className="sticky top-0 z-20 bg-white border-b border-slate-200">
         <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center gap-4">
           <button onClick={() => saveAndGo(`/review/${setId}`)} className="text-sm text-blue-600 hover:underline whitespace-nowrap">
@@ -166,6 +170,9 @@ export function AttemptEditor({
               <span className="text-slate-400">Not saved</span>
             )}
           </div>
+          <a href="/guide" target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 hover:text-slate-900 hover:underline whitespace-nowrap">
+            Guide ↗
+          </a>
           <form action={logoutAction}>
             <button type="submit" className="text-xs text-slate-500 hover:text-slate-900 hover:underline">Sign out</button>
           </form>
@@ -247,6 +254,13 @@ export function AttemptEditor({
               disabled={submitted}
             />
           ))}
+          <TrialMeta
+            initial={initialMeta}
+            disabled={submitted}
+            onSave={(next) => saveAttemptMetaAction({
+              attemptId, nctId: trial.nctId, notes: next.notes, flags: next.flags,
+            })}
+          />
           <MarkCompleteToggle
             complete={initialComplete}
             disabled={submitted}

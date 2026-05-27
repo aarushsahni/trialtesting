@@ -41,6 +41,33 @@ export async function startOrResumeAttempt(setId: string): Promise<ActionResult 
   return { ok: true, attemptId: inserted[0].id };
 }
 
+// Save per-trial notes + flags inside the attempt's per_trial_meta JSON.
+export async function saveAttemptMetaAction(opts: {
+  attemptId: string; nctId: string; notes: string; flags: Record<string, boolean>;
+}): Promise<ActionResult> {
+  let session;
+  try { session = await requireSession('reviewer'); }
+  catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
+
+  const rows = await query<QualificationAttemptRow>(
+    `SELECT * FROM qualification_attempts WHERE id = $1`,
+    [opts.attemptId],
+  );
+  const a = rows[0];
+  if (!a) return { ok: false, error: 'Attempt not found.' };
+  if (a.reviewer_id !== session.userId) return { ok: false, error: 'Not your attempt.' };
+  if (a.status !== 'in_progress') return { ok: false, error: 'Attempt is locked.' };
+
+  const merged = { ...(a.per_trial_meta ?? {}) };
+  merged[opts.nctId] = { notes: opts.notes, flags: opts.flags };
+
+  await query(
+    `UPDATE qualification_attempts SET per_trial_meta = $1::jsonb WHERE id = $2`,
+    [JSON.stringify(merged), opts.attemptId],
+  );
+  return { ok: true };
+}
+
 // Mark a single trial in the attempt as complete (or un-complete).
 export async function markTrialCompleteAction(opts: {
   attemptId: string; nctId: string; complete: boolean;

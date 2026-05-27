@@ -98,6 +98,8 @@ async function main() {
       nct_id TEXT NOT NULL REFERENCES qualification_trials(nct_id),
       schema_version_id UUID NOT NULL REFERENCES schema_versions(id),
       key_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      notes TEXT NOT NULL DEFAULT '',
+      flags JSONB NOT NULL DEFAULT '{}'::jsonb,
       complete BOOLEAN NOT NULL DEFAULT FALSE,
       built_by_annotator_id UUID REFERENCES users(id),
       built_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -116,6 +118,7 @@ async function main() {
       qualification_set_id UUID NOT NULL REFERENCES qualification_sets(id) ON DELETE CASCADE,
       schema_version_id UUID NOT NULL REFERENCES schema_versions(id),
       answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+      per_trial_meta JSONB NOT NULL DEFAULT '{}'::jsonb,
       completed_nct_ids TEXT[] NOT NULL DEFAULT '{}',
       status TEXT NOT NULL DEFAULT 'in_progress'
         CHECK (status IN ('in_progress', 'submitted', 'passed', 'failed')),

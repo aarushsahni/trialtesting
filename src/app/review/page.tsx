@@ -32,6 +32,10 @@ export default async function ReviewHome() {
             Each test is a fixed set of trials. Label each one independently —
             your answers are scored against an expert reference key.
           </p>
+          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-900">
+            📖 Before you start, skim the <a href="/guide" className="underline font-medium">annotation guide</a> — especially
+            the &quot;General annotation rules&quot; section. The ? button at the bottom-right of every trial page has a 7-point cheat sheet.
+          </div>
         </div>
 
         {sets.length === 0 ? (

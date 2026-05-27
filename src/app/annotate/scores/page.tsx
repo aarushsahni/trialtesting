@@ -4,6 +4,7 @@ import { readSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { AppHeader } from '@/components/AppHeader';
 import { FieldClass } from '@/lib/types';
+import { ResetAttemptButton } from './ResetAttemptButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,12 +53,28 @@ export default async function ScoresPage() {
       <AppHeader name={session.name} role={session.role} />
       <main className="max-w-6xl mx-auto px-6 py-10">
         <Link href="/annotate" className="text-sm text-blue-600 hover:underline">← Annotator dashboard</Link>
-        <div className="mt-3 mb-8">
-          <h1 className="text-2xl font-bold text-slate-900">Reviewer scores</h1>
-          <p className="text-sm text-slate-600 mt-1">
-            Pass bar: overall F1 ≥ 0.75 <span className="text-slate-400">·</span> hard-exclude F1 ≥ 0.80.
-            Reviewers don&apos;t see their own scores — only you do.
-          </p>
+        <div className="mt-3 mb-8 flex items-baseline justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Reviewer scores</h1>
+            <p className="text-sm text-slate-600 mt-1">
+              Pass bar: overall F1 ≥ 0.75 <span className="text-slate-400">·</span> hard-exclude F1 ≥ 0.80.
+              Reviewers don&apos;t see their own scores — only you do.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <a
+              href="/api/export/scores"
+              className="text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg hover:border-blue-400 hover:text-blue-700 transition whitespace-nowrap"
+            >
+              Scores CSV
+            </a>
+            <a
+              href="/api/export/attempts"
+              className="text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg hover:border-blue-400 hover:text-blue-700 transition whitespace-nowrap"
+            >
+              Long-format CSV
+            </a>
+          </div>
         </div>
 
         {rows.length === 0 ? (
@@ -142,11 +159,14 @@ function AttemptCard({ row }: { row: AttemptSummary }) {
         </>
       )}
 
-      {row.submitted_at && (
-        <p className="text-xs text-slate-400 mt-3">
-          Submitted {new Date(row.submitted_at).toLocaleString()}
+      <div className="flex items-end justify-between mt-3">
+        <p className="text-xs text-slate-400">
+          {row.submitted_at
+            ? `Submitted ${new Date(row.submitted_at).toLocaleString()}`
+            : 'Not submitted yet'}
         </p>
-      )}
+        <ResetAttemptButton attemptId={row.attempt_id} reviewerName={row.reviewer_name} />
+      </div>
     </div>
   );
 }
