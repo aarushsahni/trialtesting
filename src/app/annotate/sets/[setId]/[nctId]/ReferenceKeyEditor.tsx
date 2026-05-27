@@ -45,9 +45,12 @@ export function ReferenceKeyEditor({
 }: Props) {
   const router = useRouter();
   const [answers, setAnswers] = useState<TrialAnswers>(initial);
+  const [complete, setComplete] = useState(initialComplete);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(Object.keys(initial).length > 0 ? Date.now() : null);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const fieldsDisabled = setLocked || complete;
 
   const answersRef = useRef(answers);
   useEffect(() => { answersRef.current = answers; }, [answers]);
@@ -250,24 +253,27 @@ export function ReferenceKeyEditor({
               blockKey={b}
               answers={answers[b] ?? {}}
               onFieldChange={(fieldKey, value) => setBlockField(b, fieldKey, value)}
-              disabled={setLocked}
+              disabled={fieldsDisabled}
             />
           ))}
           <TrialMeta
             initial={initialMeta}
-            disabled={setLocked}
+            disabled={fieldsDisabled}
             onSave={(next) => saveReferenceKeyMetaAction({
               setId, nctId: trial.nctId, notes: next.notes, flags: next.flags,
             })}
           />
           <MarkCompleteToggle
-            complete={initialComplete}
+            complete={complete}
             disabled={setLocked}
-            helpText="When complete, every null field is treated as an intentional 'trial does not constrain this'. Required before the set can be locked."
+            helpText="When complete, fields lock so null values are confirmed as intentional. Click 'Unlock to edit' to make changes."
             onToggle={async (next) => {
               // Flush any pending field edits first so they don't get lost
               try { await save(); } catch {}
-              return markReferenceKeyCompleteAction({ setId, nctId: trial.nctId, complete: next });
+              setComplete(next); // optimistic
+              const r = await markReferenceKeyCompleteAction({ setId, nctId: trial.nctId, complete: next });
+              if (!r.ok) setComplete(!next); // rollback
+              return r;
             }}
           />
         </div>

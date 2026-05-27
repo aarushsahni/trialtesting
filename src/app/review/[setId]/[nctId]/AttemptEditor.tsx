@@ -50,12 +50,15 @@ export function AttemptEditor({
   // Whole-attempt state lives client-side. Per-trial edits go through this map.
   const [allAnswers, setAllAnswers] = useState<Record<string, TrialAnswers>>(initialAllAnswers);
   const trialAnswers: TrialAnswers = allAnswers[trial.nctId] ?? {};
+  const [complete, setComplete] = useState(initialComplete);
 
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(
     Object.keys(initialAllAnswers[trial.nctId] ?? {}).length > 0 ? Date.now() : null,
   );
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const fieldsDisabled = submitted || complete;
 
   const allAnswersRef = useRef(allAnswers);
   useEffect(() => { allAnswersRef.current = allAnswers; }, [allAnswers]);
@@ -251,23 +254,26 @@ export function AttemptEditor({
               blockKey={b}
               answers={trialAnswers[b] ?? {}}
               onFieldChange={(fieldKey, value) => setBlockField(b, fieldKey, value)}
-              disabled={submitted}
+              disabled={fieldsDisabled}
             />
           ))}
           <TrialMeta
             initial={initialMeta}
-            disabled={submitted}
+            disabled={fieldsDisabled}
             onSave={(next) => saveAttemptMetaAction({
               attemptId, nctId: trial.nctId, notes: next.notes, flags: next.flags,
             })}
           />
           <MarkCompleteToggle
-            complete={initialComplete}
+            complete={complete}
             disabled={submitted}
-            helpText="When complete, every null field is treated as an intentional 'trial does not constrain this'. All trials must be marked complete before you can submit the test."
+            helpText="When complete, fields lock so null values are confirmed as intentional. All trials must be complete before you can submit. Click 'Unlock to edit' to change answers."
             onToggle={async (next) => {
               try { await save(); } catch {}
-              return markTrialCompleteAction({ attemptId, nctId: trial.nctId, complete: next });
+              setComplete(next); // optimistic
+              const r = await markTrialCompleteAction({ attemptId, nctId: trial.nctId, complete: next });
+              if (!r.ok) setComplete(!next); // rollback
+              return r;
             }}
           />
         </div>
