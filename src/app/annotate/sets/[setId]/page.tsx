@@ -12,6 +12,7 @@ export const dynamic = 'force-dynamic';
 interface TrialWithStatus extends QualificationTrialRow {
   has_key: boolean;
   populated_field_count: number;
+  complete: boolean;
 }
 
 export default async function SetDetail({ params }: { params: Promise<{ setId: string }> }) {
@@ -48,11 +49,12 @@ export default async function SetDetail({ params }: { params: Promise<{ setId: s
         if (v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0)) populated++;
       }
     }
-    return { ...t, has_key: !!k, populated_field_count: populated };
+    return { ...t, has_key: !!k, populated_field_count: populated, complete: !!k?.complete };
   });
 
-  const completedCount = trialsWithStatus.filter(t => t.has_key && t.populated_field_count > 0).length;
-  const lockable = !set.locked_at && completedCount === trials.length;
+  const completeCount = trialsWithStatus.filter(t => t.complete).length;
+  const inProgressCount = trialsWithStatus.filter(t => !t.complete && (t.has_key && t.populated_field_count > 0)).length;
+  const lockable = !set.locked_at && completeCount === trials.length;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -65,7 +67,8 @@ export default async function SetDetail({ params }: { params: Promise<{ setId: s
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{set.name}</h1>
             <p className="text-sm text-slate-600 mt-1">
-              {completedCount} / {trials.length} reference keys built
+              <span className="font-bold text-slate-900">{completeCount}</span> / {trials.length} complete
+              {inProgressCount > 0 && <span className="text-amber-700"> · {inProgressCount} in progress</span>}
               {set.locked_at && (
                 <span className="ml-3 text-emerald-700 font-semibold">
                   · Locked {new Date(set.locked_at).toLocaleString()}
@@ -82,7 +85,7 @@ export default async function SetDetail({ params }: { params: Promise<{ setId: s
           {trialsWithStatus.map((t) => {
             const blocks = (t.assigned_blocks as BlockKey[]).map(b => BLOCKS[b]?.label ?? b);
             const started = t.has_key && t.populated_field_count > 0;
-            const dotColor = started ? 'bg-emerald-500' : 'bg-slate-300';
+            const dotColor = t.complete ? 'bg-emerald-500' : started ? 'bg-amber-400' : 'bg-slate-300';
             return (
               <Link
                 key={t.nct_id}

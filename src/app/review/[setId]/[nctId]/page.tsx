@@ -72,6 +72,7 @@ export default async function ReviewerTrialPage({
       blocks={trial.assigned_blocks as BlockKey[]}
       allAnswers={allAnswers}
       initialForTrial={initial}
+      initialComplete={(attempt.completed_nct_ids ?? []).includes(nctId)}
       prevNctId={prevNctId}
       nextNctId={nextNctId}
     />

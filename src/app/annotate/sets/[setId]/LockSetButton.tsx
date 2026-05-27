@@ -36,7 +36,7 @@ export function LockSetButton({ setId, disabled }: { setId: string; disabled: bo
         {pending ? 'Locking…' : 'Lock set'}
       </button>
       {disabled && !pending && (
-        <p className="text-xs text-slate-500">All trials must have a populated reference key first.</p>
+        <p className="text-xs text-slate-500">Mark every trial complete first.</p>
       )}
       {err && <p className="text-xs text-red-600">{err}</p>}
     </div>

@@ -50,6 +50,7 @@ export default async function TestSetPage({ params }: { params: Promise<{ setId:
   ]);
   const attempt = attempts[0];
   const answers = (attempt?.answers ?? {}) as Record<string, TrialAnswers>;
+  const completedSet = new Set(attempt?.completed_nct_ids ?? []);
   const submitted = attempt?.status !== 'in_progress';
 
   const trialsWithStatus = trials.map((t) => {
@@ -61,9 +62,10 @@ export default async function TestSetPage({ params }: { params: Promise<{ setId:
         if (v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0)) populated++;
       }
     }
-    return { ...t, populated };
+    return { ...t, populated, complete: completedSet.has(t.nct_id) };
   });
-  const startedCount = trialsWithStatus.filter(t => t.populated > 0).length;
+  const completeCount = trialsWithStatus.filter(t => t.complete).length;
+  const inProgressCount = trialsWithStatus.filter(t => !t.complete && t.populated > 0).length;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -74,14 +76,15 @@ export default async function TestSetPage({ params }: { params: Promise<{ setId:
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{set.name}</h1>
             <p className="text-sm text-slate-600 mt-1">
-              {startedCount} / {trials.length} trials started
+              <span className="font-bold text-slate-900">{completeCount}</span> / {trials.length} complete
+              {inProgressCount > 0 && <span className="text-amber-700"> · {inProgressCount} in progress</span>}
               {submitted && (
                 <span className="ml-3 text-emerald-700 font-semibold">· Submitted</span>
               )}
             </p>
           </div>
           {!submitted && (
-            <SubmitTestButton attemptId={attempt!.id} disabled={startedCount < trials.length} />
+            <SubmitTestButton attemptId={attempt!.id} disabled={completeCount < trials.length} />
           )}
         </div>
 
@@ -95,6 +98,7 @@ export default async function TestSetPage({ params }: { params: Promise<{ setId:
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100">
           {trialsWithStatus.map((t) => {
             const started = t.populated > 0;
+            const dotColor = t.complete ? 'bg-emerald-500' : started ? 'bg-amber-400' : 'bg-slate-300';
             const blocks = (t.assigned_blocks as BlockKey[]).map(b => BLOCKS[b]?.label ?? b);
             return (
               <Link
@@ -103,7 +107,7 @@ export default async function TestSetPage({ params }: { params: Promise<{ setId:
                 className="block p-4 hover:bg-blue-50 transition"
               >
                 <div className="flex items-start gap-3">
-                  <span className={`mt-1.5 inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${started ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                  <span className={`mt-1.5 inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotColor}`} />
                   <div className="flex-1 min-w-0">
                     <div className="text-xs text-slate-500 font-mono flex items-center gap-3 flex-wrap">
                       <span>{t.nct_id}</span>

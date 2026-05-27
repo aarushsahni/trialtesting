@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { logoutAction } from '@/app/actions/auth';
-import { saveReferenceKeyAction } from '@/app/actions/annotate';
+import { markReferenceKeyCompleteAction, saveReferenceKeyAction } from '@/app/actions/annotate';
 import { EligibilityText } from '@/components/EligibilityText';
 import { BlockSection } from '@/components/BlockSection';
+import { MarkCompleteToggle } from '@/components/MarkCompleteToggle';
 import { BLOCKS } from '@/lib/schema/field-schemas';
 import { BlockAnswers, BlockKey, FieldValue, TrialAnswers } from '@/lib/types';
 
@@ -31,12 +32,13 @@ interface Props {
   };
   blocks: BlockKey[];
   initial: TrialAnswers;
+  initialComplete: boolean;
   prevNctId: string | null;
   nextNctId: string | null;
 }
 
 export function ReferenceKeyEditor({
-  session, setId, setName, setLocked, trial, blocks, initial,
+  session, setId, setName, setLocked, trial, blocks, initial, initialComplete,
   prevNctId, nextNctId,
 }: Props) {
   const router = useRouter();
@@ -246,6 +248,16 @@ export function ReferenceKeyEditor({
               disabled={setLocked}
             />
           ))}
+          <MarkCompleteToggle
+            complete={initialComplete}
+            disabled={setLocked}
+            helpText="When complete, every null field is treated as an intentional 'trial does not constrain this'. Required before the set can be locked."
+            onToggle={async (next) => {
+              // Flush any pending field edits first so they don't get lost
+              try { await save(); } catch {}
+              return markReferenceKeyCompleteAction({ setId, nctId: trial.nctId, complete: next });
+            }}
+          />
         </div>
       </div>
     </div>

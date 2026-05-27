@@ -41,6 +41,34 @@ export async function startOrResumeAttempt(setId: string): Promise<ActionResult 
   return { ok: true, attemptId: inserted[0].id };
 }
 
+// Mark a single trial in the attempt as complete (or un-complete).
+export async function markTrialCompleteAction(opts: {
+  attemptId: string; nctId: string; complete: boolean;
+}): Promise<ActionResult> {
+  let session;
+  try { session = await requireSession('reviewer'); }
+  catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
+
+  const rows = await query<QualificationAttemptRow>(
+    `SELECT * FROM qualification_attempts WHERE id = $1`,
+    [opts.attemptId],
+  );
+  const a = rows[0];
+  if (!a) return { ok: false, error: 'Attempt not found.' };
+  if (a.reviewer_id !== session.userId) return { ok: false, error: 'Not your attempt.' };
+  if (a.status !== 'in_progress') return { ok: false, error: 'Attempt is locked.' };
+
+  const current = new Set(a.completed_nct_ids ?? []);
+  if (opts.complete) current.add(opts.nctId);
+  else current.delete(opts.nctId);
+
+  await query(
+    `UPDATE qualification_attempts SET completed_nct_ids = $1 WHERE id = $2`,
+    [Array.from(current), opts.attemptId],
+  );
+  return { ok: true };
+}
+
 // Save attempt answers (called from auto-save). Only allowed while attempt is in_progress.
 export async function saveAttemptAction(opts: {
   attemptId: string;
@@ -80,6 +108,19 @@ export async function submitAttemptAction(attemptId: string): Promise<ActionResu
   if (!attempt) return { ok: false, error: 'Attempt not found.' };
   if (attempt.reviewer_id !== session.userId) return { ok: false, error: 'Not your attempt.' };
   if (attempt.status !== 'in_progress') return { ok: false, error: 'Already submitted.' };
+
+  // Submit gate: every trial in the set must be in completed_nct_ids
+  const sets = await query<{ trial_nct_ids: string[] }>(
+    `SELECT trial_nct_ids FROM qualification_sets WHERE id = $1`,
+    [attempt.qualification_set_id],
+  );
+  const set = sets[0];
+  if (!set) return { ok: false, error: 'Set not found.' };
+  const completed = new Set(attempt.completed_nct_ids ?? []);
+  const missing = set.trial_nct_ids.filter((id) => !completed.has(id));
+  if (missing.length > 0) {
+    return { ok: false, error: `Mark all ${set.trial_nct_ids.length} trials complete before submitting (${missing.length} still pending).` };
+  }
 
   const score = await scoreAttempt(attempt.id);
   const status = score.passed ? 'passed' : 'failed';

@@ -38,7 +38,7 @@ export function SubmitTestButton({
         {pending ? 'Submitting…' : 'Submit test'}
       </button>
       {disabled && !pending && (
-        <p className="text-xs text-slate-500">Start every trial first.</p>
+        <p className="text-xs text-slate-500">Mark every trial complete first.</p>
       )}
       {err && <p className="text-xs text-red-600">{err}</p>}
     </div>
