@@ -70,7 +70,7 @@ export async function createSession(payload: SessionPayload): Promise<void> {
   const token = await new SignJWT({ ...payload })
     .setProtectedHeader({ alg: ALG })
     .setIssuedAt()
-    .setExpirationTime('30d')
+    .setExpirationTime('6h')
     .sign(secret());
 
   const c = await cookies();
@@ -79,7 +79,7 @@ export async function createSession(payload: SessionPayload): Promise<void> {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: 60 * 60 * 24 * 30,
+    maxAge: 60 * 60 * 6,
   });
 }
 
