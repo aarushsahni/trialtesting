@@ -32,12 +32,20 @@ export default async function AnnotateHome() {
     <div className="min-h-screen bg-slate-50">
       <AppHeader name={session.name} role={session.role} />
       <main className="max-w-5xl mx-auto px-6 py-10">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-900">Qualification sets</h1>
-          <p className="text-sm text-slate-600 mt-1">
-            Build the reference key for each trial. When complete, lock the set so
-            reviewers can take it.
-          </p>
+        <div className="mb-8 flex items-baseline justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Qualification sets</h1>
+            <p className="text-sm text-slate-600 mt-1">
+              Build the reference key for each trial. When complete, lock the set so
+              reviewers can take it.
+            </p>
+          </div>
+          <Link
+            href="/annotate/scores"
+            className="text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg hover:border-blue-400 hover:text-blue-700 transition whitespace-nowrap"
+          >
+            Reviewer scores →
+          </Link>
         </div>
 
         {sets.length === 0 ? (
