@@ -15,11 +15,24 @@ export function DobInput({ id, name, required, className }: Props) {
   const [value, setValue] = useState('');
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
+    const raw = e.target.value;
+    let digits = raw.replace(/\D/g, '');
+    // If the user just deleted an auto-inserted slash (raw is shorter than
+    // current value AND the char that disappeared was a slash), also drop
+    // the preceding digit so backspace feels natural.
+    const lastOfOld = value[value.length - 1];
+    if (raw.length < value.length && lastOfOld === '/') {
+      digits = digits.slice(0, -1);
+    }
+    digits = digits.slice(0, 8);
     let formatted = '';
-    if (digits.length <= 2) formatted = digits;
-    else if (digits.length <= 4) formatted = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    if (digits.length < 2) formatted = digits;
+    else if (digits.length < 4) formatted = `${digits.slice(0, 2)}/${digits.slice(2)}`;
     else formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    // Append a trailing slash once the segment is complete (so the slash
+    // appears AFTER the digit that finished it, not before the next one).
+    if (digits.length === 2) formatted = digits + '/';
+    else if (digits.length === 4) formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/`;
     setValue(formatted);
   }
 
