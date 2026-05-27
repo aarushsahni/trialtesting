@@ -72,39 +72,29 @@ export async function saveReferenceKeyMetaAction(opts: {
   return { ok: true };
 }
 
-// Mark a reference key as complete (or un-complete). Editing complete=true
-// reference keys is still allowed until the set itself is locked.
+// Mark a reference key as complete (or un-complete). Single upsert so it
+// works whether or not a row exists yet, on every toggle.
 export async function markReferenceKeyCompleteAction(opts: {
   setId: string; nctId: string; complete: boolean;
 }): Promise<ActionResult> {
   try { await requireSession('annotator'); }
   catch { return { ok: false, error: 'Not signed in as annotator.' }; }
 
-  const sets = await query<{ locked_at: string | null }>(
-    `SELECT locked_at FROM qualification_sets WHERE id = $1`,
+  const sets = await query<{ schema_version_id: string; locked_at: string | null }>(
+    `SELECT schema_version_id, locked_at FROM qualification_sets WHERE id = $1`,
     [opts.setId],
   );
-  if (!sets[0]) return { ok: false, error: 'Set not found.' };
-  if (sets[0].locked_at) return { ok: false, error: 'Set is locked.' };
+  const set = sets[0];
+  if (!set) return { ok: false, error: 'Set not found.' };
+  if (set.locked_at) return { ok: false, error: 'Set is locked.' };
 
-  const r = await query(
-    `UPDATE reference_keys SET complete = $1
-     WHERE qualification_set_id = $2 AND nct_id = $3`,
-    [opts.complete, opts.setId, opts.nctId],
+  await query(
+    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, complete)
+     VALUES ($1, $2, $3, '{}'::jsonb, $4)
+     ON CONFLICT (qualification_set_id, nct_id) DO UPDATE
+       SET complete = EXCLUDED.complete`,
+    [opts.setId, opts.nctId, set.schema_version_id, opts.complete],
   );
-  if (r.length === 0) {
-    // Row doesn't exist — create an empty key marked complete
-    const sv = await query<{ schema_version_id: string }>(
-      `SELECT schema_version_id FROM qualification_sets WHERE id = $1`,
-      [opts.setId],
-    );
-    if (!sv[0]) return { ok: false, error: 'Set not found.' };
-    await query(
-      `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, complete)
-       VALUES ($1, $2, $3, '{}'::jsonb, $4)`,
-      [opts.setId, opts.nctId, sv[0].schema_version_id, opts.complete],
-    );
-  }
   return { ok: true };
 }
 

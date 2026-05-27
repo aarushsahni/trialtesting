@@ -17,9 +17,14 @@ export function MarkCompleteToggle({ complete, disabled, onToggle, helpText }: P
     if (disabled || pending) return;
     setPending(true);
     setErr(null);
-    const r = await onToggle(!complete);
-    setPending(false);
-    if (!r.ok) setErr(r.error ?? 'Failed');
+    try {
+      const r = await onToggle(!complete);
+      if (!r.ok) setErr(r.error ?? 'Failed');
+    } catch (e) {
+      setErr((e as Error)?.message ?? 'Failed');
+    } finally {
+      setPending(false); // never get stuck on "…"
+    }
   }
 
   return (
