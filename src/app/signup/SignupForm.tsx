@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { signupAction, ActionResult } from '../actions/auth';
+import { DobInput } from '@/components/DobInput';
 
 const initial: ActionResult = { ok: true };
 
@@ -52,16 +53,7 @@ export default function SignupForm() {
         <label htmlFor="dob" className="text-xs uppercase tracking-wider text-slate-500 font-semibold block mb-2">
           Date of birth <span className="text-slate-400 normal-case font-normal">(MM/DD/YYYY)</span>
         </label>
-        <input
-          id="dob"
-          name="dob"
-          type="text"
-          required
-          inputMode="numeric"
-          placeholder="03/14/1990"
-          autoComplete="off"
-          className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        <DobInput id="dob" name="dob" required />
         <p className="text-xs text-slate-400 mt-1.5">
           Used as your password to sign back in later.
         </p>
