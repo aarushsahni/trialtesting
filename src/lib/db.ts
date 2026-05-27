@@ -67,7 +67,7 @@ export interface QualificationTrialRow {
   overall_status: string | null;
   study_type: string | null;
   phases: string[] | null;
-  assigned_block: string;
+  assigned_blocks: string[];
   fetched_at: string;
 }
 

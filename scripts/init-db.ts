@@ -16,8 +16,13 @@ async function main() {
       : undefined,
   });
 
-  console.log('Dropping old v1 tables (if present)...');
-  await pool.query(`DROP TABLE IF EXISTS reviews CASCADE`);
+  console.log('Dropping any existing tables (v1 or v2 from a prior init)...');
+  await pool.query(`DROP TABLE IF EXISTS qualification_attempts CASCADE`);
+  await pool.query(`DROP TABLE IF EXISTS reference_keys CASCADE`);
+  await pool.query(`DROP TABLE IF EXISTS qualification_sets CASCADE`);
+  await pool.query(`DROP TABLE IF EXISTS qualification_trials CASCADE`);
+  await pool.query(`DROP TABLE IF EXISTS schema_versions CASCADE`);
+  await pool.query(`DROP TABLE IF EXISTS reviews CASCADE`); // v1
   await pool.query(`DROP TABLE IF EXISTS users CASCADE`);
 
   await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
@@ -80,7 +85,7 @@ async function main() {
       overall_status TEXT,
       study_type TEXT,
       phases TEXT[],
-      assigned_block TEXT NOT NULL,
+      assigned_blocks TEXT[] NOT NULL,
       fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);

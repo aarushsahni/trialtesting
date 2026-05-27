@@ -1,99 +1,77 @@
 'use client';
 
-import { FieldDef } from '@/lib/schema/field-schemas';
-
-export interface FieldState {
-  value: unknown;     // null | undefined for "unset"
-  approved: boolean;  // user has reviewed and approved
-  edited: boolean;    // user changed the value from original
-}
+import { FieldDef, FieldValue } from '@/lib/types';
 
 interface Props {
   def: FieldDef;
-  state: FieldState;
-  original: unknown;
-  onChange: (next: FieldState) => void;
+  value: FieldValue;
+  onChange: (next: FieldValue) => void;
+  disabled?: boolean;
 }
 
-export function FieldEditor({ def, state, original, onChange }: Props) {
-  const setValue = (v: unknown) => {
-    const edited = JSON.stringify(v ?? null) !== JSON.stringify(original ?? null);
-    // Editing a value implies approval — the user is explicitly endorsing the new value.
-    onChange({ ...state, value: v, edited, approved: true });
-  };
-  const toggleApproved = () => onChange({ ...state, approved: !state.approved });
-
+export function FieldEditor({ def, value, onChange, disabled }: Props) {
   return (
-    <div className={'flex items-start gap-3 py-2 ' + (state.approved ? 'opacity-90' : '')}>
-      <input
-        type="checkbox"
-        checked={state.approved}
-        onChange={toggleApproved}
-        className="mt-2 w-4 h-4 accent-green-600 flex-shrink-0"
-        title="Approve"
-      />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-2">
-          <label className="text-sm font-medium text-gray-800">{def.label}</label>
-          {state.edited && (
-            <span className="text-[10px] uppercase tracking-wide text-amber-600 font-semibold">edited</span>
-          )}
-        </div>
-        <div className="mt-1">
-          {def.kind === 'enum' && (
-            <EnumInput options={def.options!} value={state.value} onChange={setValue} />
-          )}
-          {def.kind === 'multi' && (
-            <MultiInput options={def.options!} value={state.value} onChange={setValue} />
-          )}
-          {def.kind === 'bool' && (
-            <BoolInput value={state.value} onChange={setValue} />
-          )}
-          {def.kind === 'number' && (
-            <NumberInput value={state.value} onChange={setValue} />
-          )}
-        </div>
+    <div className="py-3 first:pt-1 last:pb-1">
+      <div className="flex items-baseline gap-2 mb-1.5">
+        <label className="text-sm font-medium text-slate-800">{def.label}</label>
+        {def.helpText && (
+          <span
+            className="text-slate-400 text-xs cursor-help select-none"
+            title={def.helpText}
+            aria-label={def.helpText}
+          >
+            ⓘ
+          </span>
+        )}
       </div>
+      {def.kind === 'multi' && (
+        <MultiInput
+          options={def.options!}
+          value={Array.isArray(value) ? value : []}
+          onChange={(v) => onChange(v.length === 0 ? null : v)}
+          disabled={disabled}
+        />
+      )}
+      {def.kind === 'bool' && (
+        <BoolInput
+          value={typeof value === 'boolean' ? value : null}
+          onChange={onChange}
+          disabled={disabled}
+        />
+      )}
+      {def.kind === 'number' && (
+        <NumberInput
+          value={typeof value === 'number' ? value : null}
+          onChange={onChange}
+          disabled={disabled}
+        />
+      )}
     </div>
   );
 }
 
-function EnumInput({ options, value, onChange }: { options: string[]; value: unknown; onChange: (v: unknown) => void }) {
-  const v = value == null ? '' : String(value);
-  return (
-    <select
-      value={v}
-      onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
-      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-    >
-      <option value="">— null —</option>
-      {options.map((o) => (
-        <option key={o} value={o}>{o}</option>
-      ))}
-    </select>
-  );
-}
-
-function MultiInput({ options, value, onChange }: { options: string[]; value: unknown; onChange: (v: unknown) => void }) {
-  const arr = Array.isArray(value) ? (value as string[]) : [];
+function MultiInput({
+  options, value, onChange, disabled,
+}: { options: string[]; value: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
   const toggle = (o: string) => {
-    const next = arr.includes(o) ? arr.filter((x) => x !== o) : [...arr, o];
-    onChange(next.length === 0 ? null : next);
+    if (disabled) return;
+    onChange(value.includes(o) ? value.filter((x) => x !== o) : [...value, o]);
   };
   return (
     <div className="flex flex-wrap gap-1.5">
       {options.map((o) => {
-        const on = arr.includes(o);
+        const on = value.includes(o);
         return (
           <button
             key={o}
             type="button"
+            disabled={disabled}
             onClick={() => toggle(o)}
             className={
-              'text-xs px-2 py-1 rounded border transition ' +
+              'text-xs px-2 py-1 rounded border transition disabled:opacity-50 disabled:cursor-not-allowed ' +
               (on
                 ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400')
+                : 'bg-white text-slate-700 border-slate-300 hover:border-blue-400')
             }
           >
             {o}
@@ -104,11 +82,16 @@ function MultiInput({ options, value, onChange }: { options: string[]; value: un
   );
 }
 
-function BoolInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
-  const v = value == null ? 'null' : value === true ? 'true' : 'false';
-  const set = (next: string) => onChange(next === 'null' ? null : next === 'true');
+function BoolInput({
+  value, onChange, disabled,
+}: { value: boolean | null; onChange: (v: boolean | null) => void; disabled?: boolean }) {
+  const current = value === null ? 'null' : value ? 'true' : 'false';
+  const set = (k: string) => {
+    if (disabled) return;
+    onChange(k === 'null' ? null : k === 'true');
+  };
   return (
-    <div className="inline-flex rounded border border-gray-300 overflow-hidden text-xs">
+    <div className="inline-flex rounded border border-slate-300 overflow-hidden text-xs">
       {[
         { k: 'true', label: 'Yes' },
         { k: 'false', label: 'No' },
@@ -117,10 +100,11 @@ function BoolInput({ value, onChange }: { value: unknown; onChange: (v: unknown)
         <button
           key={o.k}
           type="button"
+          disabled={disabled}
           onClick={() => set(o.k)}
           className={
-            'px-3 py-1.5 ' +
-            (v === o.k ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50')
+            'px-3 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed ' +
+            (current === o.k ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')
           }
         >
           {o.label}
@@ -130,19 +114,22 @@ function BoolInput({ value, onChange }: { value: unknown; onChange: (v: unknown)
   );
 }
 
-function NumberInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+function NumberInput({
+  value, onChange, disabled,
+}: { value: number | null; onChange: (v: number | null) => void; disabled?: boolean }) {
   const v = value == null ? '' : String(value);
   return (
     <input
       type="number"
       value={v}
+      disabled={disabled}
       onChange={(e) => {
         const s = e.target.value;
         if (s === '') return onChange(null);
         const n = Number(s);
         onChange(isNaN(n) ? null : n);
       }}
-      className="w-32 px-2 py-1.5 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+      className="w-32 px-2 py-1.5 text-sm border border-slate-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
     />
   );
 }
