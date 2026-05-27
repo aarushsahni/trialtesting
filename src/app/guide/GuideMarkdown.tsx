@@ -3,7 +3,21 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-export function GuideMarkdown({ source }: { source: string }) {
+interface Props {
+  source: string;
+  headingToId?: Record<string, string>;
+}
+
+function plainText(children: React.ReactNode): string {
+  if (typeof children === 'string') return children;
+  if (Array.isArray(children)) return children.map(plainText).join('');
+  if (children && typeof children === 'object' && 'props' in children) {
+    return plainText((children as { props: { children: React.ReactNode } }).props.children);
+  }
+  return '';
+}
+
+export function GuideMarkdown({ source, headingToId }: Props) {
   return (
     <div className="mt-4 prose-styles">
       <ReactMarkdown
@@ -12,9 +26,13 @@ export function GuideMarkdown({ source }: { source: string }) {
           h1: ({ children, ...props }) => (
             <h1 {...props} className="text-3xl font-bold text-slate-900 mt-2 mb-4">{children}</h1>
           ),
-          h2: ({ children, ...props }) => (
-            <h2 {...props} className="text-2xl font-bold text-slate-900 mt-10 mb-3 pb-2 border-b-2 border-blue-200">{children}</h2>
-          ),
+          h2: ({ children, ...props }) => {
+            const text = plainText(children).trim();
+            const id = headingToId?.[text];
+            return (
+              <h2 {...props} id={id} className="text-2xl font-bold text-slate-900 mt-10 mb-3 pb-2 border-b-2 border-blue-200 scroll-mt-20">{children}</h2>
+            );
+          },
           h3: ({ children, ...props }) => (
             <h3 {...props} className="text-lg font-bold text-slate-900 mt-6 mb-2">{children}</h3>
           ),
