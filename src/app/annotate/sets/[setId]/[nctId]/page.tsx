@@ -29,11 +29,17 @@ export default async function ReferenceKeyPage({
   const trial = trials[0];
   if (!set || !trial) notFound();
 
-  // Prev / next within the set
-  const allIds = set.trial_nct_ids;
-  const idx = allIds.indexOf(nctId);
-  const prevNctId = idx > 0 ? allIds[idx - 1] : null;
-  const nextNctId = idx < allIds.length - 1 ? allIds[idx + 1] : null;
+  // Prev / next within the set — order matches the trial list page
+  const orderedIdRows = await query<{ nct_id: string }>(`
+    SELECT qt.nct_id FROM qualification_trials qt
+    JOIN qualification_sets qs ON qt.nct_id = ANY(qs.trial_nct_ids)
+    WHERE qs.id = $1
+    ORDER BY qt.assigned_blocks[1], qt.nct_id
+  `, [setId]);
+  const orderedIds = orderedIdRows.map((r) => r.nct_id);
+  const idx = orderedIds.indexOf(nctId);
+  const prevNctId = idx > 0 ? orderedIds[idx - 1] : null;
+  const nextNctId = idx < orderedIds.length - 1 ? orderedIds[idx + 1] : null;
 
   const initial = (keys[0]?.key_data ?? {}) as TrialAnswers;
   const initialComplete = keys[0]?.complete ?? false;
