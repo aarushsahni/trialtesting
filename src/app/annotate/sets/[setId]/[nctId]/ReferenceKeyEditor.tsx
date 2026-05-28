@@ -35,13 +35,14 @@ interface Props {
   initial: TrialAnswers;
   initialComplete: boolean;
   initialMeta: TrialMetaValue;
+  lastEditedBy: { name: string; at: string } | null;
   prevNctId: string | null;
   nextNctId: string | null;
 }
 
 export function ReferenceKeyEditor({
   session, setId, setName, setLocked, trial, blocks, initial, initialComplete, initialMeta,
-  prevNctId, nextNctId,
+  lastEditedBy, prevNctId, nextNctId,
 }: Props) {
   const router = useRouter();
   const [answers, setAnswers] = useState<TrialAnswers>(initial);
@@ -149,6 +150,12 @@ export function ReferenceKeyEditor({
               <span className="text-xs text-slate-400">· {session.name}</span>
             </div>
             <h1 className="text-sm font-medium text-slate-900 truncate">{trial.briefTitle}</h1>
+            {lastEditedBy && (
+              <div className="text-[11px] text-slate-500 mt-0.5">
+                Last saved by <span className="font-semibold text-slate-700">{lastEditedBy.name}</span>{' '}
+                · {new Date(lastEditedBy.at).toLocaleString()}
+              </div>
+            )}
           </div>
           <div className="text-xs text-slate-500 whitespace-nowrap">
             <span className="font-bold text-slate-900">{populatedFields}</span> / {totalFields} fields

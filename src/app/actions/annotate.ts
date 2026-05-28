@@ -77,7 +77,8 @@ export async function saveReferenceKeyMetaAction(opts: {
 export async function markReferenceKeyCompleteAction(opts: {
   setId: string; nctId: string; complete: boolean;
 }): Promise<ActionResult> {
-  try { await requireSession('annotator'); }
+  let session;
+  try { session = await requireSession('annotator'); }
   catch { return { ok: false, error: 'Not signed in as annotator.' }; }
 
   const sets = await query<{ schema_version_id: string; locked_at: string | null }>(
@@ -89,11 +90,13 @@ export async function markReferenceKeyCompleteAction(opts: {
   if (set.locked_at) return { ok: false, error: 'Set is locked.' };
 
   await query(
-    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, complete)
-     VALUES ($1, $2, $3, '{}'::jsonb, $4)
+    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, complete, built_by_annotator_id, built_at)
+     VALUES ($1, $2, $3, '{}'::jsonb, $4, $5, NOW())
      ON CONFLICT (qualification_set_id, nct_id) DO UPDATE
-       SET complete = EXCLUDED.complete`,
-    [opts.setId, opts.nctId, set.schema_version_id, opts.complete],
+       SET complete = EXCLUDED.complete,
+           built_by_annotator_id = EXCLUDED.built_by_annotator_id,
+           built_at = NOW()`,
+    [opts.setId, opts.nctId, set.schema_version_id, opts.complete, session.userId],
   );
   return { ok: true };
 }

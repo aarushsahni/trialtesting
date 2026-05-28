@@ -13,6 +13,8 @@ interface TrialWithStatus extends QualificationTrialRow {
   has_key: boolean;
   populated_field_count: number;
   complete: boolean;
+  built_by_name: string | null;
+  built_at: string | null;
 }
 
 export default async function SetDetail({ params }: { params: Promise<{ setId: string }> }) {
@@ -29,10 +31,12 @@ export default async function SetDetail({ params }: { params: Promise<{ setId: s
       WHERE qs.id = $1
       ORDER BY qt.assigned_blocks[1], qt.nct_id
     `, [setId]),
-    query<ReferenceKeyRow>(
-      `SELECT * FROM reference_keys WHERE qualification_set_id = $1`,
-      [setId],
-    ),
+    query<ReferenceKeyRow & { built_by_name: string | null }>(`
+      SELECT rk.*, u.name AS built_by_name
+      FROM reference_keys rk
+      LEFT JOIN users u ON u.id = rk.built_by_annotator_id
+      WHERE rk.qualification_set_id = $1
+    `, [setId]),
   ]);
 
   const set = sets[0];
@@ -49,7 +53,14 @@ export default async function SetDetail({ params }: { params: Promise<{ setId: s
         if (v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0)) populated++;
       }
     }
-    return { ...t, has_key: !!k, populated_field_count: populated, complete: !!k?.complete };
+    return {
+      ...t,
+      has_key: !!k,
+      populated_field_count: populated,
+      complete: !!k?.complete,
+      built_by_name: (k as (typeof keys)[number] | undefined)?.built_by_name ?? null,
+      built_at: k?.built_at ?? null,
+    };
   });
 
   const completeCount = trialsWithStatus.filter(t => t.complete).length;
@@ -104,8 +115,14 @@ export default async function SetDetail({ params }: { params: Promise<{ setId: s
                       ))}
                     </div>
                     <div className="font-medium text-slate-900 mt-1 truncate">{t.brief_title}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      {t.populated_field_count} fields populated
+                    <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-3 flex-wrap">
+                      <span>{t.populated_field_count} fields populated</span>
+                      {t.built_by_name && t.built_at && (
+                        <span>
+                          · Last saved by <strong className="text-slate-700">{t.built_by_name}</strong>{' '}
+                          {new Date(t.built_at).toLocaleString()}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

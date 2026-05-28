@@ -17,10 +17,12 @@ export default async function ReferenceKeyPage({
   const [sets, trials, keys] = await Promise.all([
     query<QualificationSetRow>(`SELECT * FROM qualification_sets WHERE id = $1`, [setId]),
     query<QualificationTrialRow>(`SELECT * FROM qualification_trials WHERE nct_id = $1`, [nctId]),
-    query<ReferenceKeyRow>(
-      `SELECT * FROM reference_keys WHERE qualification_set_id = $1 AND nct_id = $2`,
-      [setId, nctId],
-    ),
+    query<ReferenceKeyRow & { built_by_name: string | null }>(`
+      SELECT rk.*, u.name AS built_by_name
+      FROM reference_keys rk
+      LEFT JOIN users u ON u.id = rk.built_by_annotator_id
+      WHERE rk.qualification_set_id = $1 AND rk.nct_id = $2
+    `, [setId, nctId]),
   ]);
 
   const set = sets[0];
@@ -39,6 +41,9 @@ export default async function ReferenceKeyPage({
     notes: keys[0]?.notes ?? '',
     flags: keys[0]?.flags ?? {},
   };
+  const lastEditedBy = keys[0] && keys[0].built_at
+    ? { name: keys[0].built_by_name ?? 'someone', at: keys[0].built_at }
+    : null;
 
   return (
     <ReferenceKeyEditor
@@ -65,6 +70,7 @@ export default async function ReferenceKeyPage({
       initial={initial}
       initialComplete={initialComplete}
       initialMeta={initialMeta}
+      lastEditedBy={lastEditedBy}
       prevNctId={prevNctId}
       nextNctId={nextNctId}
     />
