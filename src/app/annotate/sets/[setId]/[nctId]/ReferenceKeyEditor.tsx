@@ -41,12 +41,13 @@ interface Props {
 }
 
 export function ReferenceKeyEditor({
-  session, setId, setName, setLocked, trial, blocks, initial, initialComplete, initialMeta,
+  session, setId, setName, setLocked: initialSetLocked, trial, blocks, initial, initialComplete, initialMeta,
   lastEditedBy, prevNctId, nextNctId,
 }: Props) {
   const router = useRouter();
   const [answers, setAnswers] = useState<TrialAnswers>(initial);
   const [complete, setComplete] = useState(initialComplete);
+  const [setLocked, setSetLocked] = useState(initialSetLocked);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(Object.keys(initial).length > 0 ? Date.now() : null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -144,7 +145,7 @@ export function ReferenceKeyEditor({
               ))}
               {setLocked && (
                 <span className="text-[10px] uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-semibold">
-                  Locked · read only
+                  Set locked
                 </span>
               )}
               <span className="text-xs text-slate-400">· {session.name}</span>
@@ -272,14 +273,30 @@ export function ReferenceKeyEditor({
           />
           <MarkCompleteToggle
             complete={complete}
-            disabled={setLocked}
-            helpText="When complete, fields lock so null values are confirmed as intentional. Click 'Unlock to edit' to make changes."
+            helpText={
+              setLocked
+                ? "The set is locked because all trials are complete. Unlocking this trial will unlock the whole set (reviewers won't be able to take it until you lock it again)."
+                : "When complete, fields lock so null values are confirmed as intentional. Click 'Unlock to edit' to make changes."
+            }
             onToggle={async (next) => {
-              // Flush any pending field edits first so they don't get lost
+              // If the set is locked and we're unlocking, confirm — this
+              // cascades to unlocking the whole set for reviewers.
+              if (setLocked && !next) {
+                const ok = window.confirm(
+                  'This will also unlock the entire qualification set. Reviewers will no longer be able to take it until you lock it again. Any reviewer attempts already submitted keep their scores (computed against the previous reference key). Continue?'
+                );
+                if (!ok) return { ok: false, error: 'Cancelled.' };
+              }
               try { await save(); } catch {}
-              setComplete(next); // optimistic
+              // Optimistic UI updates
+              const wasSetLocked = setLocked;
+              setComplete(next);
+              if (wasSetLocked && !next) setSetLocked(false);
               const r = await markReferenceKeyCompleteAction({ setId, nctId: trial.nctId, complete: next });
-              if (!r.ok) setComplete(!next); // rollback
+              if (!r.ok) {
+                setComplete(!next);
+                if (wasSetLocked && !next) setSetLocked(true);
+              }
               return r;
             }}
           />

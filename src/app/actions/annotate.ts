@@ -74,6 +74,10 @@ export async function saveReferenceKeyMetaAction(opts: {
 
 // Mark a reference key as complete (or un-complete). Single upsert so it
 // works whether or not a row exists yet, on every toggle.
+// Mark a reference key complete/incomplete. If the set is currently locked
+// AND the caller is unlocking the trial, also unlock the set (so reviewers
+// can no longer take it until the annotator re-locks). Refusing to flip a
+// trial to "complete" on a locked set since that's redundant.
 export async function markReferenceKeyCompleteAction(opts: {
   setId: string; nctId: string; complete: boolean;
 }): Promise<ActionResult> {
@@ -87,7 +91,14 @@ export async function markReferenceKeyCompleteAction(opts: {
   );
   const set = sets[0];
   if (!set) return { ok: false, error: 'Set not found.' };
-  if (set.locked_at) return { ok: false, error: 'Set is locked.' };
+  if (set.locked_at && opts.complete) {
+    return { ok: false, error: 'Set is already locked.' };
+  }
+
+  // Cascade: unlocking a trial on a locked set also unlocks the set
+  if (set.locked_at && !opts.complete) {
+    await query(`UPDATE qualification_sets SET locked_at = NULL WHERE id = $1`, [opts.setId]);
+  }
 
   await query(
     `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, complete, built_by_annotator_id, built_at)
