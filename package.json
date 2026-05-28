@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "init-db": "tsx scripts/init-db.ts",
+    "reset-db": "tsx scripts/reset-db.ts",
+    "backup": "tsx scripts/backup-db.ts",
     "seed-qualification": "tsx scripts/seed-qualification-set.ts"
   },
   "dependencies": {
