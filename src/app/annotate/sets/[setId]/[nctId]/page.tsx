@@ -3,6 +3,8 @@ import { readSession } from '@/lib/auth';
 import { query, QualificationSetRow, QualificationTrialRow, ReferenceKeyRow } from '@/lib/db';
 import { BlockKey, TrialAnswers } from '@/lib/types';
 import { ReferenceKeyEditor } from './ReferenceKeyEditor';
+import { getCurrentGuide } from '@/lib/guide-store';
+import { parseGuideHelpText } from '@/lib/guide-parser';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +53,9 @@ export default async function ReferenceKeyPage({
     ? { name: keys[0].built_by_name ?? 'someone', at: keys[0].built_at }
     : null;
 
+  const guide = await getCurrentGuide();
+  const helpTextMap = guide ? parseGuideHelpText(guide.markdown) : {};
+
   return (
     <ReferenceKeyEditor
       session={{ name: session.name, role: session.role }}
@@ -77,6 +82,7 @@ export default async function ReferenceKeyPage({
       initialComplete={initialComplete}
       initialMeta={initialMeta}
       lastEditedBy={lastEditedBy}
+      helpTextMap={helpTextMap}
       prevNctId={prevNctId}
       nextNctId={nextNctId}
     />

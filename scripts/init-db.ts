@@ -5,6 +5,8 @@ import { config } from 'dotenv';
 config({ path: '.env.local' });
 config();
 import { Pool } from 'pg';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 async function main() {
   const url = process.env.DATABASE_URL;
@@ -22,6 +24,7 @@ async function main() {
   await pool.query(`DROP TABLE IF EXISTS qualification_sets CASCADE`);
   await pool.query(`DROP TABLE IF EXISTS qualification_trials CASCADE`);
   await pool.query(`DROP TABLE IF EXISTS schema_versions CASCADE`);
+  await pool.query(`DROP TABLE IF EXISTS annotation_guide CASCADE`);
   await pool.query(`DROP TABLE IF EXISTS reviews CASCADE`); // v1
   await pool.query(`DROP TABLE IF EXISTS users CASCADE`);
 
@@ -129,7 +132,26 @@ async function main() {
     )
   `);
 
-  console.log('v2 DB ready: users, schema_versions, qualification_sets, qualification_trials, reference_keys, qualification_attempts');
+  // Annotation guide — single-row table seeded from the markdown file.
+  // After init, edits via the UI go to this row; the file is just the seed.
+  await pool.query(`
+    CREATE TABLE annotation_guide (
+      id INT PRIMARY KEY DEFAULT 0 CHECK (id = 0),
+      markdown TEXT NOT NULL,
+      edited_by_user_id UUID REFERENCES users(id),
+      edited_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  const seedPath = join(process.cwd(), 'src/lib/annotation-guide.md');
+  const seedMarkdown = readFileSync(seedPath, 'utf8');
+  await pool.query(
+    `INSERT INTO annotation_guide (id, markdown) VALUES (0, $1)`,
+    [seedMarkdown],
+  );
+  console.log(`Seeded annotation_guide (${seedMarkdown.length} chars from ${seedPath})`);
+
+  console.log('v2 DB ready: users, schema_versions, qualification_sets, qualification_trials, reference_keys, qualification_attempts, annotation_guide');
   await pool.end();
 }
 

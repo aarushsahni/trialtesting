@@ -10,9 +10,12 @@ interface Props {
   answers: BlockAnswers;
   onFieldChange: (fieldKey: string, value: FieldValue) => void;
   disabled?: boolean;
+  /** Per-field tooltip text, keyed by fieldKey. Comes from the annotation
+   *  guide's "What it captures" column. Falls back to FieldDef.helpText. */
+  helpTextByField?: Record<string, string>;
 }
 
-export function BlockSection({ blockKey, answers, onFieldChange, disabled }: Props) {
+export function BlockSection({ blockKey, answers, onFieldChange, disabled, helpTextByField }: Props) {
   const block = BLOCKS[blockKey];
   const fields = Object.entries(block.fields);
 
@@ -41,6 +44,7 @@ export function BlockSection({ blockKey, answers, onFieldChange, disabled }: Pro
               value={(answers[fieldKey] ?? null) as FieldValue}
               onChange={(v) => onFieldChange(fieldKey, v)}
               disabled={disabled}
+              helpTextOverride={helpTextByField?.[fieldKey]}
             />
           );
         })}

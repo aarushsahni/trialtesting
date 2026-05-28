@@ -8,15 +8,19 @@ interface Props {
   value: FieldValue;
   onChange: (next: FieldValue) => void;
   disabled?: boolean;
+  /** Override the FieldDef's static helpText. Used to pipe the guide's
+   *  "What it captures" column into the tooltip. */
+  helpTextOverride?: string;
 }
 
-export function FieldEditor({ def, value, onChange, disabled }: Props) {
+export function FieldEditor({ def, value, onChange, disabled, helpTextOverride }: Props) {
+  const helpText = helpTextOverride || def.helpText;
   return (
     <div className="py-3 first:pt-1 last:pb-1">
       <div className="flex items-baseline gap-2 mb-1.5">
         <label className="text-sm font-medium text-slate-800">{def.label}</label>
-        {def.helpText && (
-          <Tooltip text={def.helpText}>
+        {helpText && (
+          <Tooltip text={helpText}>
             <span className="text-slate-400 text-xs cursor-help select-none hover:text-blue-600">
               ⓘ
             </span>

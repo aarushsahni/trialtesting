@@ -11,6 +11,7 @@ import { TrialMeta, TrialMetaValue } from '@/components/TrialMeta';
 import { HelpModal } from '@/components/HelpModal';
 import { BLOCKS } from '@/lib/schema/field-schemas';
 import { BlockAnswers, BlockKey, FieldValue, TrialAnswers } from '@/lib/types';
+import { HelpTextMap } from '@/lib/guide-parser';
 
 interface Props {
   session: { name: string; role: 'reviewer' };
@@ -38,13 +39,15 @@ interface Props {
   initialForTrial: TrialAnswers;
   initialComplete: boolean;
   initialMeta: TrialMetaValue;
+  helpTextMap: HelpTextMap;
   prevNctId: string | null;
   nextNctId: string | null;
 }
 
 export function AttemptEditor({
   session, setId, setName, attemptId, submitted, trial, blocks,
-  allAnswers: initialAllAnswers, initialComplete, initialMeta, prevNctId, nextNctId,
+  allAnswers: initialAllAnswers, initialComplete, initialMeta, helpTextMap,
+  prevNctId, nextNctId,
 }: Props) {
   const router = useRouter();
   // Whole-attempt state lives client-side. Per-trial edits go through this map.
@@ -255,6 +258,7 @@ export function AttemptEditor({
               answers={trialAnswers[b] ?? {}}
               onFieldChange={(fieldKey, value) => setBlockField(b, fieldKey, value)}
               disabled={fieldsDisabled}
+              helpTextByField={helpTextMap[b]}
             />
           ))}
           <TrialMeta

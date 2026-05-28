@@ -4,6 +4,8 @@ import { query, QualificationAttemptRow, QualificationSetRow, QualificationTrial
 import { BlockKey, TrialAnswers } from '@/lib/types';
 import { AttemptEditor } from './AttemptEditor';
 import { startOrResumeAttempt } from '@/app/actions/review';
+import { getCurrentGuide } from '@/lib/guide-store';
+import { parseGuideHelpText } from '@/lib/guide-parser';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,6 +57,9 @@ export default async function ReviewerTrialPage({
   const prevNctId = idx > 0 ? orderedIds[idx - 1] : null;
   const nextNctId = idx < orderedIds.length - 1 ? orderedIds[idx + 1] : null;
 
+  const guide = await getCurrentGuide();
+  const helpTextMap = guide ? parseGuideHelpText(guide.markdown) : {};
+
   return (
     <AttemptEditor
       session={{ name: session.name, role: session.role }}
@@ -82,6 +87,7 @@ export default async function ReviewerTrialPage({
       initialForTrial={initial}
       initialComplete={(attempt.completed_nct_ids ?? []).includes(nctId)}
       initialMeta={initialMeta}
+      helpTextMap={helpTextMap}
       prevNctId={prevNctId}
       nextNctId={nextNctId}
     />

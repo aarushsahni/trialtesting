@@ -3,6 +3,7 @@
 import { requireSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { TrialAnswers } from '@/lib/types';
+import { saveGuide } from '@/lib/guide-store';
 
 export interface ActionResult {
   ok: boolean;
@@ -109,6 +110,19 @@ export async function markReferenceKeyCompleteAction(opts: {
            built_at = NOW()`,
     [opts.setId, opts.nctId, set.schema_version_id, opts.complete, session.userId],
   );
+  return { ok: true };
+}
+
+// Save the annotation guide markdown. Annotator-only.
+export async function saveGuideAction(markdown: string): Promise<ActionResult> {
+  let session;
+  try { session = await requireSession('annotator'); }
+  catch { return { ok: false, error: 'Only annotators can edit the guide.' }; }
+
+  if (typeof markdown !== 'string') return { ok: false, error: 'Invalid markdown.' };
+  if (markdown.length > 500_000) return { ok: false, error: 'Guide too large.' };
+
+  await saveGuide(markdown, session.userId);
   return { ok: true };
 }
 

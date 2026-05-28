@@ -1,16 +1,16 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { readSession } from '@/lib/auth';
 import { ALL_BLOCKS } from '@/lib/schema/field-schemas';
 import { AppHeader } from '@/components/AppHeader';
 import { GuideMarkdown } from './GuideMarkdown';
+import { GuideEditor } from './GuideEditor';
+import { getCurrentGuide } from '@/lib/guide-store';
 
 export const dynamic = 'force-dynamic';
 
-// Maps heading text in the markdown to BlockKey for sidebar anchor links.
-// Keep in sync with the H2 titles in src/lib/annotation-guide.md.
+// Map heading text in the markdown to BlockKey for sidebar anchor links.
+// Kept in sync with src/lib/guide-parser.ts.
 const HEADING_TO_BLOCK: Record<string, string> = {
   'General annotation rules': 'general-rules',
   'Field-type quick reference': 'field-type-quick-reference',
@@ -41,19 +41,12 @@ const HEADING_TO_BLOCK: Record<string, string> = {
   'Plasma Cell (Myeloma / Amyloidosis)': 'plasma_cell',
 };
 
-function loadGuide(): string {
-  try {
-    return readFileSync(join(process.cwd(), 'src/lib/annotation-guide.md'), 'utf8');
-  } catch (e) {
-    return `# Annotation guide\n\n_Could not load guide content (${(e as Error).message}). The file should be at src/lib/annotation-guide.md._`;
-  }
-}
-
 export default async function GuidePage() {
   const session = await readSession();
   if (!session) redirect('/login');
 
-  const guideMarkdown = loadGuide();
+  const guide = await getCurrentGuide();
+  const guideMarkdown = guide?.markdown ?? '# Annotation guide\n\n_No guide content yet — run npm run init-db to seed it._';
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -62,22 +55,13 @@ export default async function GuidePage() {
         <aside className="lg:sticky lg:top-[68px] lg:self-start">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm shadow-blue-100/30">
             <nav className="text-sm space-y-1.5 pb-3 border-b border-slate-200 mb-3">
-              <a
-                href="#general-rules"
-                className="block font-semibold text-blue-700 hover:underline"
-              >
+              <a href="#general-rules" className="block font-semibold text-blue-700 hover:underline">
                 ↑ General annotation rules
               </a>
-              <a
-                href="#field-type-quick-reference"
-                className="block text-slate-700 hover:text-blue-700 hover:underline"
-              >
+              <a href="#field-type-quick-reference" className="block text-slate-700 hover:text-blue-700 hover:underline">
                 Field-type quick reference
               </a>
-              <a
-                href="#adjudication-note-template"
-                className="block text-slate-700 hover:text-blue-700 hover:underline"
-              >
+              <a href="#adjudication-note-template" className="block text-slate-700 hover:text-blue-700 hover:underline">
                 Adjudication note template
               </a>
             </nav>
@@ -100,13 +84,30 @@ export default async function GuidePage() {
 
         <article className="min-w-0">
           <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm shadow-blue-100/30">
-            <Link
-              href={session.role === 'annotator' ? '/annotate' : '/review'}
-              className="text-sm text-blue-600 hover:underline"
-            >
-              ← {session.role === 'annotator' ? 'Annotator dashboard' : 'Reviewer dashboard'}
-            </Link>
-            <GuideMarkdown source={guideMarkdown} headingToId={HEADING_TO_BLOCK} />
+            <div className="flex items-baseline justify-between gap-4 mb-2">
+              <Link
+                href={session.role === 'annotator' ? '/annotate' : '/review'}
+                className="text-sm text-blue-600 hover:underline"
+              >
+                ← {session.role === 'annotator' ? 'Annotator dashboard' : 'Reviewer dashboard'}
+              </Link>
+              {guide?.edited_at && (
+                <span className="text-xs text-slate-400">
+                  Last edited
+                  {guide.edited_by_name ? ` by ${guide.edited_by_name}` : ''}{' '}
+                  {new Date(guide.edited_at).toLocaleString()}
+                </span>
+              )}
+            </div>
+
+            {session.role === 'annotator' ? (
+              <GuideEditor
+                initial={guideMarkdown}
+                headingToId={HEADING_TO_BLOCK}
+              />
+            ) : (
+              <GuideMarkdown source={guideMarkdown} headingToId={HEADING_TO_BLOCK} />
+            )}
           </div>
         </article>
       </main>

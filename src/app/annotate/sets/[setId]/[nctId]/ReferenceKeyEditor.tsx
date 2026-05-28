@@ -10,6 +10,7 @@ import { MarkCompleteToggle } from '@/components/MarkCompleteToggle';
 import { TrialMeta, TrialMetaValue } from '@/components/TrialMeta';
 import { BLOCKS } from '@/lib/schema/field-schemas';
 import { BlockAnswers, BlockKey, FieldValue, TrialAnswers } from '@/lib/types';
+import { HelpTextMap } from '@/lib/guide-parser';
 
 interface Props {
   session: { name: string; role: 'annotator' };
@@ -36,13 +37,14 @@ interface Props {
   initialComplete: boolean;
   initialMeta: TrialMetaValue;
   lastEditedBy: { name: string; at: string } | null;
+  helpTextMap: HelpTextMap;
   prevNctId: string | null;
   nextNctId: string | null;
 }
 
 export function ReferenceKeyEditor({
   session, setId, setName, setLocked: initialSetLocked, trial, blocks, initial, initialComplete, initialMeta,
-  lastEditedBy, prevNctId, nextNctId,
+  lastEditedBy, helpTextMap, prevNctId, nextNctId,
 }: Props) {
   const router = useRouter();
   const [answers, setAnswers] = useState<TrialAnswers>(initial);
@@ -262,6 +264,7 @@ export function ReferenceKeyEditor({
               answers={answers[b] ?? {}}
               onFieldChange={(fieldKey, value) => setBlockField(b, fieldKey, value)}
               disabled={fieldsDisabled}
+              helpTextByField={helpTextMap[b]}
             />
           ))}
           <TrialMeta
