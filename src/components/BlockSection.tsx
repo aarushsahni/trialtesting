@@ -1,6 +1,7 @@
 'use client';
 
 import { FieldEditor } from './FieldEditor';
+import { Tooltip } from './Tooltip';
 import { BLOCKS } from '@/lib/schema/field-schemas';
 import { BlockAnswers, BlockKey, FieldDef, FieldValue } from '@/lib/types';
 
@@ -90,10 +91,9 @@ function PriorTherapyPair({
     <div className="py-3">
       <div className="flex items-baseline gap-2 mb-2">
         <label className="text-sm font-medium text-slate-800">Prior therapy</label>
-        <span
-          className="text-slate-400 text-xs cursor-help select-none"
-          title="For each therapy: 'Required' = trial requires patient to have received it; 'Excluded' = prior receipt disqualifies; 'Unconstrained' = trial doesn't mention it."
-        >ⓘ</span>
+        <Tooltip text="For each therapy: 'Required' = trial requires patient to have received it; 'Excluded' = prior receipt disqualifies; 'Unconstrained' = trial doesn't mention it.">
+          <span className="text-slate-400 text-xs cursor-help select-none hover:text-blue-600">ⓘ</span>
+        </Tooltip>
       </div>
       <div className="space-y-1.5">
         {therapies.map((t) => {

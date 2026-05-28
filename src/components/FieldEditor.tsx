@@ -1,6 +1,7 @@
 'use client';
 
 import { FieldDef, FieldValue } from '@/lib/types';
+import { Tooltip } from './Tooltip';
 
 interface Props {
   def: FieldDef;
@@ -15,13 +16,11 @@ export function FieldEditor({ def, value, onChange, disabled }: Props) {
       <div className="flex items-baseline gap-2 mb-1.5">
         <label className="text-sm font-medium text-slate-800">{def.label}</label>
         {def.helpText && (
-          <span
-            className="text-slate-400 text-xs cursor-help select-none"
-            title={def.helpText}
-            aria-label={def.helpText}
-          >
-            ⓘ
-          </span>
+          <Tooltip text={def.helpText}>
+            <span className="text-slate-400 text-xs cursor-help select-none hover:text-blue-600">
+              ⓘ
+            </span>
+          </Tooltip>
         )}
       </div>
       {def.kind === 'multi' && (
