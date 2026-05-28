@@ -12,6 +12,9 @@ export const dynamic = 'force-dynamic';
 // Maps heading text in the markdown to BlockKey for sidebar anchor links.
 // Keep in sync with the H2 titles in src/lib/annotation-guide.md.
 const HEADING_TO_BLOCK: Record<string, string> = {
+  'General annotation rules': 'general-rules',
+  'Field-type quick reference': 'field-type-quick-reference',
+  'Adjudication note template': 'adjudication-note-template',
   'Prostate': 'prostate',
   'Urothelial / Bladder': 'urothelial',
   'Renal Cell Carcinoma (RCC)': 'rcc',
@@ -58,6 +61,26 @@ export default async function GuidePage() {
       <main className="max-w-6xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-8">
         <aside className="lg:sticky lg:top-[68px] lg:self-start">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm shadow-blue-100/30">
+            <nav className="text-sm space-y-1.5 pb-3 border-b border-slate-200 mb-3">
+              <a
+                href="#general-rules"
+                className="block font-semibold text-blue-700 hover:underline"
+              >
+                ↑ General annotation rules
+              </a>
+              <a
+                href="#field-type-quick-reference"
+                className="block text-slate-700 hover:text-blue-700 hover:underline"
+              >
+                Field-type quick reference
+              </a>
+              <a
+                href="#adjudication-note-template"
+                className="block text-slate-700 hover:text-blue-700 hover:underline"
+              >
+                Adjudication note template
+              </a>
+            </nav>
             <h2 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-3">
               Jump to block
             </h2>
