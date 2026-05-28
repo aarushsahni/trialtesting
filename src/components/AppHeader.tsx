@@ -3,11 +3,11 @@ import { logoutAction } from '@/app/actions/auth';
 
 interface Props {
   name: string;
-  role: 'annotator' | 'reviewer';
+  role: 'expert' | 'expert';
 }
 
 export function AppHeader({ name, role }: Props) {
-  const dashboardHref = role === 'annotator' ? '/annotate' : '/review';
+  const dashboardHref = role === 'expert' ? '/review' : '/expert';
   return (
     <header className="border-b border-blue-100 bg-white/70 backdrop-blur sticky top-0 z-10">
       <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">

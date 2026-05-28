@@ -1,6 +1,6 @@
 // CSV export: long-format per-field comparison.
-// One row per (reviewer × trial × block × field) with reference value,
-// attempt value, agreement outcome. Annotator-only.
+// One row per (expert × trial × block × field) with reference value,
+// attempt value, agreement outcome. Expert-only.
 
 import { NextResponse } from 'next/server';
 import { readSession } from '@/lib/auth';
@@ -33,7 +33,7 @@ function valueAsString(v: FieldValue): string {
 
 export async function GET() {
   const session = await readSession();
-  if (!session || session.role !== 'annotator') {
+  if (!session || session.role !== 'expert') {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
@@ -91,7 +91,7 @@ export async function GET() {
   const trialMap = new Map(trials.map(t => [t.nct_id, t]));
 
   const headers = [
-    'reviewer', 'set', 'attempt_status', 'nct_id', 'trial_title',
+    'expert', 'set', 'attempt_status', 'nct_id', 'trial_title',
     'trial_complete_by_reviewer',
     'block', 'field', 'field_class', 'field_kind',
     'reference_value', 'attempt_value', 'outcome',

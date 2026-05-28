@@ -21,7 +21,7 @@ export default async function SetDetail({ params }: { params: Promise<{ setId: s
   const { setId } = await params;
   const session = await readSession();
   if (!session) redirect('/login');
-  if (session.role !== 'annotator') redirect('/review');
+  if (session.role !== 'expert') redirect('/expert');
 
   const [sets, trials, keys] = await Promise.all([
     query<QualificationSetRow>(`SELECT * FROM qualification_sets WHERE id = $1`, [setId]),
@@ -71,7 +71,7 @@ export default async function SetDetail({ params }: { params: Promise<{ setId: s
     <div className="min-h-screen bg-slate-50">
       <AppHeader name={session.name} role={session.role} />
       <main className="max-w-5xl mx-auto px-6 py-10">
-        <Link href="/annotate" className="text-sm text-blue-600 hover:underline">
+        <Link href="/review" className="text-sm text-blue-600 hover:underline">
           ← All sets
         </Link>
         <div className="mt-3 mb-8 flex items-baseline justify-between gap-4">
@@ -100,7 +100,7 @@ export default async function SetDetail({ params }: { params: Promise<{ setId: s
             return (
               <Link
                 key={t.nct_id}
-                href={`/annotate/sets/${set.id}/${t.nct_id}`}
+                href={`/review/sets/${set.id}/${t.nct_id}`}
                 className="block p-4 hover:bg-blue-50 transition"
               >
                 <div className="flex items-start gap-3">

@@ -33,7 +33,7 @@ async function main() {
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL UNIQUE,
-      role TEXT NOT NULL CHECK (role IN ('annotator', 'reviewer')),
+      role TEXT NOT NULL CHECK (role IN ('expert', 'expert')),
       dob_hash TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )

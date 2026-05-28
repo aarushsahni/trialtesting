@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { resetAttemptAction } from '@/app/actions/annotate';
+import { resetAttemptAction } from '@/app/actions/review';
 
 export function ResetAttemptButton({
   attemptId, reviewerName,

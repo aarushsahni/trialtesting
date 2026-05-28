@@ -33,23 +33,23 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
 
   if (!name) return { ok: false, error: 'Name is required.' };
   if (name.length > 80) return { ok: false, error: 'Name too long.' };
-  if (role !== 'reviewer' && role !== 'annotator') {
+  if (role !== 'expert' && role !== 'expert') {
     return { ok: false, error: 'Pick a role.' };
   }
 
   const dob = normalizeDob(dobRaw);
   if (!dob) return { ok: false, error: 'Date of birth must be MM/DD/YYYY.' };
 
-  if (role === 'annotator') {
+  if (role === 'expert') {
     if (!annotatorPasskeyConfigured()) {
       return {
         ok: false,
-        error: 'Annotator signup is not configured on this server (ANNOTATOR_PASSKEY env var not set). Ask the project lead.',
+        error: 'Expert signup is not configured on this server (ANNOTATOR_PASSKEY env var not set). Ask the project lead.',
       };
     }
-    if (!passkey) return { ok: false, error: 'Annotator passkey required.' };
+    if (!passkey) return { ok: false, error: 'Expert passkey required.' };
     if (!annotatorPasskeyMatches(passkey)) {
-      return { ok: false, error: 'Incorrect annotator passkey.' };
+      return { ok: false, error: 'Incorrect reviewer passkey.' };
     }
   }
 
@@ -70,7 +70,7 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
   }
 
   await createSession({ userId: user.id, name: user.name, role: user.role });
-  redirect(user.role === 'annotator' ? '/annotate' : '/review');
+  redirect(user.role === 'expert' ? '/review' : '/expert');
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ export async function loginAction(_prev: ActionResult, formData: FormData): Prom
   if (!dobOk) return { ok: false, error: 'Incorrect date of birth.' };
 
   await createSession({ userId: user.id, name: user.name, role: user.role });
-  redirect(user.role === 'annotator' ? '/annotate' : '/review');
+  redirect(user.role === 'expert' ? '/review' : '/expert');
 }
 
 // ──────────────────────────────────────────────────────────────────────────

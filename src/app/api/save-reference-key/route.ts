@@ -10,7 +10,7 @@ export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   const session = await readSession();
-  if (!session || session.role !== 'annotator') {
+  if (!session || session.role !== 'expert') {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 

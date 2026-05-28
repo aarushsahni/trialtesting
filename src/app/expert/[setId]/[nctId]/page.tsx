@@ -1,35 +1,49 @@
 import { notFound, redirect } from 'next/navigation';
 import { readSession } from '@/lib/auth';
-import { query, QualificationSetRow, QualificationTrialRow, ReferenceKeyRow } from '@/lib/db';
+import { query, QualificationAttemptRow, QualificationSetRow, QualificationTrialRow } from '@/lib/db';
 import { BlockKey, TrialAnswers } from '@/lib/types';
-import { ReferenceKeyEditor } from './ReferenceKeyEditor';
+import { AttemptEditor } from './AttemptEditor';
+import { startOrResumeAttempt } from '@/app/actions/expert';
 import { getCurrentGuide } from '@/lib/guide-store';
 import { parseGuideHelpText } from '@/lib/guide-parser';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ReferenceKeyPage({
+export default async function ReviewerTrialPage({
   params,
 }: { params: Promise<{ setId: string; nctId: string }> }) {
   const { setId, nctId } = await params;
   const session = await readSession();
   if (!session) redirect('/login');
-  if (session.role !== 'annotator') redirect('/review');
+  if (session.role !== 'expert') redirect('/review');
 
-  const [sets, trials, keys] = await Promise.all([
-    query<QualificationSetRow>(`SELECT * FROM qualification_sets WHERE id = $1`, [setId]),
-    query<QualificationTrialRow>(`SELECT * FROM qualification_trials WHERE nct_id = $1`, [nctId]),
-    query<ReferenceKeyRow & { built_by_name: string | null }>(`
-      SELECT rk.*, u.name AS built_by_name
-      FROM reference_keys rk
-      LEFT JOIN users u ON u.id = rk.built_by_annotator_id
-      WHERE rk.qualification_set_id = $1 AND rk.nct_id = $2
-    `, [setId, nctId]),
-  ]);
-
+  const sets = await query<QualificationSetRow>(
+    `SELECT * FROM qualification_sets WHERE id = $1`,
+    [setId],
+  );
   const set = sets[0];
+  if (!set) notFound();
+  if (!set.locked_at) redirect('/expert');
+
+  const start = await startOrResumeAttempt(setId);
+  if (!start.ok || !start.attemptId) {
+    redirect('/expert');
+  }
+
+  const [trials, attempts] = await Promise.all([
+    query<QualificationTrialRow>(`SELECT * FROM qualification_trials WHERE nct_id = $1`, [nctId]),
+    query<QualificationAttemptRow>(
+      `SELECT * FROM qualification_attempts WHERE id = $1`,
+      [start.attemptId],
+    ),
+  ]);
   const trial = trials[0];
-  if (!set || !trial) notFound();
+  const attempt = attempts[0];
+  if (!trial || !attempt) notFound();
+
+  const allAnswers = (attempt.answers ?? {}) as Record<string, TrialAnswers>;
+  const initial: TrialAnswers = allAnswers[nctId] ?? {};
+  const initialMeta = (attempt.per_trial_meta ?? {})[nctId] ?? { notes: '', flags: {} };
 
   // Prev / next within the set — order matches the trial list page
   const orderedIdRows = await query<{ nct_id: string }>(`
@@ -43,25 +57,16 @@ export default async function ReferenceKeyPage({
   const prevNctId = idx > 0 ? orderedIds[idx - 1] : null;
   const nextNctId = idx < orderedIds.length - 1 ? orderedIds[idx + 1] : null;
 
-  const initial = (keys[0]?.key_data ?? {}) as TrialAnswers;
-  const initialComplete = keys[0]?.complete ?? false;
-  const initialMeta = {
-    notes: keys[0]?.notes ?? '',
-    flags: keys[0]?.flags ?? {},
-  };
-  const lastEditedBy = keys[0] && keys[0].built_at
-    ? { name: keys[0].built_by_name ?? 'someone', at: keys[0].built_at }
-    : null;
-
   const guide = await getCurrentGuide();
   const helpTextMap = guide ? parseGuideHelpText(guide.markdown) : {};
 
   return (
-    <ReferenceKeyEditor
+    <AttemptEditor
       session={{ name: session.name, role: session.role }}
       setId={setId}
       setName={set.name}
-      setLocked={!!set.locked_at}
+      attemptId={attempt.id}
+      submitted={attempt.status !== 'in_progress'}
       trial={{
         nctId: trial.nct_id,
         briefTitle: trial.brief_title,
@@ -78,10 +83,10 @@ export default async function ReferenceKeyPage({
         ctgovMaxAge: trial.ctgov_max_age,
       }}
       blocks={trial.assigned_blocks as BlockKey[]}
-      initial={initial}
-      initialComplete={initialComplete}
+      allAnswers={allAnswers}
+      initialForTrial={initial}
+      initialComplete={(attempt.completed_nct_ids ?? []).includes(nctId)}
       initialMeta={initialMeta}
-      lastEditedBy={lastEditedBy}
       helpTextMap={helpTextMap}
       prevNctId={prevNctId}
       nextNctId={nextNctId}

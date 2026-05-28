@@ -32,7 +32,7 @@ interface ScoreData {
 export default async function ScoresPage() {
   const session = await readSession();
   if (!session) redirect('/login');
-  if (session.role !== 'annotator') redirect('/review');
+  if (session.role !== 'expert') redirect('/expert');
 
   const rows = await query<AttemptSummary>(`
     SELECT
@@ -52,13 +52,13 @@ export default async function ScoresPage() {
     <div className="min-h-screen bg-slate-50">
       <AppHeader name={session.name} role={session.role} />
       <main className="max-w-6xl mx-auto px-6 py-10">
-        <Link href="/annotate" className="text-sm text-blue-600 hover:underline">← Annotator dashboard</Link>
+        <Link href="/review" className="text-sm text-blue-600 hover:underline">← Expert dashboard</Link>
         <div className="mt-3 mb-8 flex items-baseline justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Reviewer scores</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Expert scores</h1>
             <p className="text-sm text-slate-600 mt-1">
               Pass bar: overall F1 ≥ 0.75 <span className="text-slate-400">·</span> hard-exclude F1 ≥ 0.80.
-              Reviewers don&apos;t see their own scores — only you do.
+              Experts don&apos;t see their own scores — only you do.
             </p>
           </div>
           <div className="flex gap-2">
@@ -79,7 +79,7 @@ export default async function ScoresPage() {
 
         {rows.length === 0 ? (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-sm text-amber-900">
-            No reviewer attempts yet.
+            No expert attempts yet.
           </div>
         ) : (
           <div className="space-y-3">

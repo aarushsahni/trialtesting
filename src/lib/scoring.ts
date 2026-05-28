@@ -45,7 +45,7 @@ export interface ScoreResult {
   hardExclude: Counters;
   byClass: Record<FieldClass, Counters & { f1: number }>;
   byBlock: Record<string, Counters & { f1: number }>;
-  fields: FieldDatum[]; // per-field breakdown for the annotator dashboard
+  fields: FieldDatum[]; // per-field breakdown for the reviewer dashboard
 }
 
 function isPopulated(v: FieldValue): boolean {

@@ -6,7 +6,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { BLOCKS } from '@/lib/schema/field-schemas';
 import { BlockKey, TrialAnswers } from '@/lib/types';
 import { SubmitTestButton } from './SubmitTestButton';
-import { startOrResumeAttempt } from '@/app/actions/review';
+import { startOrResumeAttempt } from '@/app/actions/expert';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +14,7 @@ export default async function TestSetPage({ params }: { params: Promise<{ setId:
   const { setId } = await params;
   const session = await readSession();
   if (!session) redirect('/login');
-  if (session.role !== 'reviewer') redirect('/annotate');
+  if (session.role !== 'expert') redirect('/review');
 
   const sets = await query<QualificationSetRow>(
     `SELECT * FROM qualification_sets WHERE id = $1`,
@@ -22,7 +22,7 @@ export default async function TestSetPage({ params }: { params: Promise<{ setId:
   );
   const set = sets[0];
   if (!set) notFound();
-  if (!set.locked_at) redirect('/review');
+  if (!set.locked_at) redirect('/expert');
 
   // Ensure attempt exists
   const start = await startOrResumeAttempt(setId);
@@ -71,7 +71,7 @@ export default async function TestSetPage({ params }: { params: Promise<{ setId:
     <div className="min-h-screen bg-slate-50">
       <AppHeader name={session.name} role={session.role} />
       <main className="max-w-5xl mx-auto px-6 py-10">
-        <Link href="/review" className="text-sm text-blue-600 hover:underline">← Back</Link>
+        <Link href="/expert" className="text-sm text-blue-600 hover:underline">← Back</Link>
         <div className="mt-3 mb-8 flex items-baseline justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{set.name}</h1>
@@ -103,7 +103,7 @@ export default async function TestSetPage({ params }: { params: Promise<{ setId:
             return (
               <Link
                 key={t.nct_id}
-                href={`/review/${set.id}/${t.nct_id}`}
+                href={`/expert/${set.id}/${t.nct_id}`}
                 className="block p-4 hover:bg-blue-50 transition"
               >
                 <div className="flex items-start gap-3">

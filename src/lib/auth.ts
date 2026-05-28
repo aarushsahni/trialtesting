@@ -10,7 +10,7 @@ const COOKIE = 'qual_session';
 const ALG = 'HS256';
 
 // Hardcoded session-signing key. The threat model is small (a handful of
-// trusted reviewers); knowing this value lets you forge session cookies, so
+// trusted experts); knowing this value lets you forge session cookies, so
 // if the source ever becomes public for a higher-stakes deployment, replace
 // this with an env-var read or rotate it.
 const SESSION_KEY = new TextEncoder().encode(
@@ -43,7 +43,7 @@ export async function compareDob(dob: string, hash: string): Promise<boolean> {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Passkey check (annotator role gate)
+// Passkey check (reviewer role gate)
 // ──────────────────────────────────────────────────────────────────────────
 
 export function annotatorPasskeyConfigured(): boolean {
@@ -97,7 +97,7 @@ export async function readSession(): Promise<SessionPayload | null> {
     if (
       typeof payload.userId === 'string' &&
       typeof payload.name === 'string' &&
-      (payload.role === 'annotator' || payload.role === 'reviewer')
+      (payload.role === 'expert' || payload.role === 'expert')
     ) {
       return { userId: payload.userId, name: payload.name, role: payload.role };
     }

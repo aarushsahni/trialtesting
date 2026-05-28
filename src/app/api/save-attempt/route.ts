@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   const session = await readSession();
-  if (!session || session.role !== 'reviewer') {
+  if (!session || session.role !== 'expert') {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
   const body = await req.json().catch(() => null) as { attemptId?: string; answers?: unknown } | null;

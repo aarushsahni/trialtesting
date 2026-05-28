@@ -5,7 +5,7 @@ import { readSession } from '@/lib/auth';
 export default async function HomePage() {
   const session = await readSession();
   if (session) {
-    redirect(session.role === 'annotator' ? '/annotate' : '/review');
+    redirect(session.role === 'expert' ? '/review' : '/expert');
   }
 
   return (
@@ -35,8 +35,8 @@ export default async function HomePage() {
             Welcome
           </h2>
           <p className="text-base lg:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Two ways to participate. Reviewers take a fixed-trial test labeled blind
-            against an expert reference key. Annotators build that reference key.
+            Two ways to participate. Experts take a fixed-trial test labeled blind
+            against an expert reference key. Experts build that reference key.
           </p>
         </section>
 
@@ -52,7 +52,7 @@ export default async function HomePage() {
               Sign up →
             </h3>
             <p className="text-sm text-slate-600 leading-relaxed">
-              Create a reviewer or annotator account.
+              Create a expert or reviewer account.
             </p>
           </Link>
 

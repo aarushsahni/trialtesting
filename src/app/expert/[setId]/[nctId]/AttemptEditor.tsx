@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { logoutAction } from '@/app/actions/auth';
-import { markTrialCompleteAction, saveAttemptAction, saveAttemptMetaAction } from '@/app/actions/review';
+import { markTrialCompleteAction, saveAttemptAction, saveAttemptMetaAction } from '@/app/actions/expert';
 import { EligibilityText } from '@/components/EligibilityText';
 import { BlockSection } from '@/components/BlockSection';
 import { MarkCompleteToggle } from '@/components/MarkCompleteToggle';
@@ -14,7 +14,7 @@ import { BlockAnswers, BlockKey, FieldValue, TrialAnswers } from '@/lib/types';
 import { HelpTextMap } from '@/lib/guide-parser';
 
 interface Props {
-  session: { name: string; role: 'reviewer' };
+  session: { name: string; role: 'expert' };
   setId: string;
   setName: string;
   attemptId: string;
@@ -137,10 +137,10 @@ export function AttemptEditor({
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {!submitted && <HelpModal storageKey="reviewer-help-v1" />}
+      {!submitted && <HelpModal storageKey="expert-help-v1" />}
       <header className="sticky top-0 z-20 bg-white border-b border-slate-200">
         <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center gap-4">
-          <button onClick={() => saveAndGo(`/review/${setId}`)} className="text-sm text-blue-600 hover:underline whitespace-nowrap">
+          <button onClick={() => saveAndGo(`/expert/${setId}`)} className="text-sm text-blue-600 hover:underline whitespace-nowrap">
             ← {setName}
           </button>
           <div className="flex-1 min-w-0">
@@ -184,12 +184,12 @@ export function AttemptEditor({
           </form>
           <div className="flex gap-2">
             {prevNctId && (
-              <button onClick={() => saveAndGo(`/review/${setId}/${prevNctId}`)} className="text-sm px-3 py-1.5 border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-blue-400 transition">
+              <button onClick={() => saveAndGo(`/expert/${setId}/${prevNctId}`)} className="text-sm px-3 py-1.5 border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-blue-400 transition">
                 ← Prev
               </button>
             )}
             {nextNctId && (
-              <button onClick={() => saveAndGo(`/review/${setId}/${nextNctId}`)} className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+              <button onClick={() => saveAndGo(`/expert/${setId}/${nextNctId}`)} className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
                 Next →
               </button>
             )}

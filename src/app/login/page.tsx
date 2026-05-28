@@ -6,7 +6,7 @@ import LoginForm from './LoginForm';
 export default async function LoginPage() {
   const session = await readSession();
   if (session) {
-    redirect(session.role === 'annotator' ? '/annotate' : '/review');
+    redirect(session.role === 'expert' ? '/review' : '/expert');
   }
   const users = await listUsers();
   return (

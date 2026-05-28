@@ -8,7 +8,7 @@ const initial: ActionResult = { ok: true };
 
 export default function SignupForm() {
   const [state, formAction, pending] = useActionState(signupAction, initial);
-  const [role, setRole] = useState<'reviewer' | 'annotator'>('reviewer');
+  const [role, setRole] = useState<'expert' | 'expert'>('expert');
 
   return (
     <form action={formAction} className="bg-white border border-slate-200 rounded-2xl shadow-sm shadow-blue-100/40 p-6 space-y-5">
@@ -18,17 +18,17 @@ export default function SignupForm() {
         </label>
         <div className="grid grid-cols-2 gap-2">
           <RoleCard
-            value="reviewer"
+            value="expert"
             current={role}
             onChange={setRole}
-            label="Reviewer"
+            label="Expert"
             sub="Takes the test"
           />
           <RoleCard
-            value="annotator"
+            value="expert"
             current={role}
             onChange={setRole}
-            label="Annotator"
+            label="Expert"
             sub="Builds reference key"
           />
         </div>
@@ -59,10 +59,10 @@ export default function SignupForm() {
         </p>
       </div>
 
-      {role === 'annotator' && (
+      {role === 'expert' && (
         <div>
           <label htmlFor="passkey" className="text-xs uppercase tracking-wider text-slate-500 font-semibold block mb-2">
-            Annotator passkey
+            Expert passkey
           </label>
           <input
             id="passkey"
@@ -98,9 +98,9 @@ export default function SignupForm() {
 function RoleCard({
   value, current, onChange, label, sub,
 }: {
-  value: 'reviewer' | 'annotator';
-  current: 'reviewer' | 'annotator';
-  onChange: (r: 'reviewer' | 'annotator') => void;
+  value: 'expert' | 'expert';
+  current: 'expert' | 'expert';
+  onChange: (r: 'expert' | 'expert') => void;
   label: string;
   sub: string;
 }) {

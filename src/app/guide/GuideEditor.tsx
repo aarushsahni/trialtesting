@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { GuideMarkdown } from './GuideMarkdown';
-import { saveGuideAction } from '@/app/actions/annotate';
+import { saveGuideAction } from '@/app/actions/review';
 
 interface Props {
   initial: string;

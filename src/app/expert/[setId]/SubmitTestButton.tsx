@@ -1,18 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { lockSetAction } from '@/app/actions/annotate';
+import { submitAttemptAction } from '@/app/actions/expert';
 
-export function LockSetButton({ setId, disabled }: { setId: string; disabled: boolean }) {
+export function SubmitTestButton({
+  attemptId, disabled,
+}: { attemptId: string; disabled: boolean }) {
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   async function onClick() {
     if (disabled) return;
-    if (!confirm('Lock this set? Reviewers will be able to take it. You cannot edit the reference key after locking.')) return;
+    if (!confirm('Submit your test? You will not be able to edit your answers after this.')) return;
     setPending(true);
     setErr(null);
-    const r = await lockSetAction(setId);
+    const r = await submitAttemptAction(attemptId);
     if (!r.ok) {
       setErr(r.error ?? 'Failed');
       setPending(false);
@@ -33,7 +35,7 @@ export function LockSetButton({ setId, disabled }: { setId: string; disabled: bo
             : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200')
         }
       >
-        {pending ? 'Locking…' : 'Lock set'}
+        {pending ? 'Submitting…' : 'Submit test'}
       </button>
       {disabled && !pending && (
         <p className="text-xs text-slate-500">Mark every trial complete first.</p>

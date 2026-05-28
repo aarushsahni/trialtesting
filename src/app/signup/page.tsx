@@ -6,7 +6,7 @@ import SignupForm from './SignupForm';
 export default async function SignupPage() {
   const session = await readSession();
   if (session) {
-    redirect(session.role === 'annotator' ? '/annotate' : '/review');
+    redirect(session.role === 'expert' ? '/review' : '/expert');
   }
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-sky-50 flex items-start justify-center px-6 py-16">
@@ -16,7 +16,7 @@ export default async function SignupPage() {
         </Link>
         <h1 className="text-2xl font-bold text-slate-900 mt-4 mb-1">Create an account</h1>
         <p className="text-sm text-slate-500 mb-6">
-          Pick the role you&apos;ll be working in. Reviewers take the test; annotators
+          Pick the role you&apos;ll be working in. Experts take the test; reviewers
           build the reference key.
         </p>
         <SignupForm />

@@ -27,7 +27,7 @@ export async function query<T = any>(text: string, params?: any[]): Promise<T[]>
 // Row types
 // ──────────────────────────────────────────────────────────────────────────
 
-export type UserRole = 'annotator' | 'reviewer';
+export type UserRole = 'expert' | 'expert';
 
 export interface UserRow {
   id: string;

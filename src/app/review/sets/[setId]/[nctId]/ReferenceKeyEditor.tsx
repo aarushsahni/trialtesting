@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { logoutAction } from '@/app/actions/auth';
-import { markReferenceKeyCompleteAction, saveReferenceKeyAction, saveReferenceKeyMetaAction } from '@/app/actions/annotate';
+import { markReferenceKeyCompleteAction, saveReferenceKeyAction, saveReferenceKeyMetaAction } from '@/app/actions/review';
 import { EligibilityText } from '@/components/EligibilityText';
 import { BlockSection } from '@/components/BlockSection';
 import { MarkCompleteToggle } from '@/components/MarkCompleteToggle';
@@ -13,7 +13,7 @@ import { BlockAnswers, BlockKey, FieldValue, TrialAnswers } from '@/lib/types';
 import { HelpTextMap } from '@/lib/guide-parser';
 
 interface Props {
-  session: { name: string; role: 'annotator' };
+  session: { name: string; role: 'expert' };
   setId: string;
   setName: string;
   setLocked: boolean;
@@ -134,7 +134,7 @@ export function ReferenceKeyEditor({
       {/* Header */}
       <header className="sticky top-0 z-20 bg-white border-b border-slate-200">
         <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center gap-4">
-          <button onClick={() => saveAndGo(`/annotate/sets/${setId}`)} className="text-sm text-blue-600 hover:text-blue-700 hover:underline whitespace-nowrap">
+          <button onClick={() => saveAndGo(`/review/sets/${setId}`)} className="text-sm text-blue-600 hover:text-blue-700 hover:underline whitespace-nowrap">
             ← {setName}
           </button>
           <div className="flex-1 min-w-0">
@@ -184,12 +184,12 @@ export function ReferenceKeyEditor({
           </form>
           <div className="flex gap-2">
             {prevNctId && (
-              <button onClick={() => saveAndGo(`/annotate/sets/${setId}/${prevNctId}`)} className="text-sm px-3 py-1.5 border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-blue-400 transition">
+              <button onClick={() => saveAndGo(`/review/sets/${setId}/${prevNctId}`)} className="text-sm px-3 py-1.5 border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-blue-400 transition">
                 ← Prev
               </button>
             )}
             {nextNctId && (
-              <button onClick={() => saveAndGo(`/annotate/sets/${setId}/${nextNctId}`)} className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+              <button onClick={() => saveAndGo(`/review/sets/${setId}/${nextNctId}`)} className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
                 Next →
               </button>
             )}
@@ -278,15 +278,15 @@ export function ReferenceKeyEditor({
             complete={complete}
             helpText={
               setLocked
-                ? "The set is locked because all trials are complete. Unlocking this trial will unlock the whole set (reviewers won't be able to take it until you lock it again)."
+                ? "The set is locked because all trials are complete. Unlocking this trial will unlock the whole set (experts won't be able to take it until you lock it again)."
                 : "When complete, fields lock so null values are confirmed as intentional. Click 'Unlock to edit' to make changes."
             }
             onToggle={async (next) => {
               // If the set is locked and we're unlocking, confirm — this
-              // cascades to unlocking the whole set for reviewers.
+              // cascades to unlocking the whole set for experts.
               if (setLocked && !next) {
                 const ok = window.confirm(
-                  'This will also unlock the entire qualification set. Reviewers will no longer be able to take it until you lock it again. Any reviewer attempts already submitted keep their scores (computed against the previous reference key). Continue?'
+                  'This will also unlock the entire qualification set. Experts will no longer be able to take it until you lock it again. Any expert attempts already submitted keep their scores (computed against the previous reference key). Continue?'
                 );
                 if (!ok) return { ok: false, error: 'Cancelled.' };
               }

@@ -1,6 +1,6 @@
 // Dump every table to a single timestamped JSON file in /backups.
 // Run any time you want a safety snapshot — before risky operations,
-// after major reviewer activity, etc.
+// after major expert activity, etc.
 //
 //   npm run backup
 //

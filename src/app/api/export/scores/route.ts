@@ -1,5 +1,5 @@
-// CSV export: per-reviewer score summary.
-// Annotator-only.
+// CSV export: per-expert score summary.
+// Expert-only.
 
 import { NextResponse } from 'next/server';
 import { readSession } from '@/lib/auth';
@@ -19,7 +19,7 @@ interface Row {
 
 export async function GET() {
   const session = await readSession();
-  if (!session || session.role !== 'annotator') {
+  if (!session || session.role !== 'expert') {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
   const rows = await query<Row>(`
@@ -37,7 +37,7 @@ export async function GET() {
   `);
 
   const headers = [
-    'reviewer', 'set', 'status', 'started_at', 'submitted_at',
+    'expert', 'set', 'status', 'started_at', 'submitted_at',
     'overall_f1', 'hard_exclude_f1', 'passed',
     'tp', 'fp', 'fn', 'tn',
     'biomarker_f1', 'prior_therapy_f1', 'lab_cutoff_f1', 'accepted_diseases_f1', 'other_f1',
@@ -58,7 +58,7 @@ export async function GET() {
   return new NextResponse(rowsToCsv(headers, csvRows), {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="reviewer-scores-${new Date().toISOString().slice(0, 10)}.csv"`,
+      'Content-Disposition': `attachment; filename="expert-scores-${new Date().toISOString().slice(0, 10)}.csv"`,
     },
   });
 }
