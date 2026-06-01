@@ -6,7 +6,7 @@ import { DobInput } from '@/components/DobInput';
 
 const initial: ActionResult = { ok: true };
 
-export function AccountForm({ currentName, role }: { currentName: string; role: 'expert' | 'expert' }) {
+export function AccountForm({ currentName, role }: { currentName: string; role: 'reviewer' | 'expert' }) {
   const [state, formAction, pending] = useActionState(updateAccountAction, initial);
 
   return (

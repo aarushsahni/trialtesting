@@ -1,6 +1,6 @@
 // CSV export: long-format per-field comparison.
 // One row per (expert × trial × block × field) with reference value,
-// attempt value, agreement outcome. Expert-only.
+// attempt value, agreement outcome. Reviewer-only.
 
 import { NextResponse } from 'next/server';
 import { readSession } from '@/lib/auth';
@@ -33,14 +33,14 @@ function valueAsString(v: FieldValue): string {
 
 export async function GET() {
   const session = await readSession();
-  if (!session || session.role !== 'expert') {
+  if (!session || session.role !== 'reviewer') {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
   // Pull attempts + reference keys + trials together
   const attempts = await query<{
     attempt_id: string;
-    reviewer_name: string;
+    expert_name: string;
     set_id: string;
     set_name: string;
     answers: Record<string, TrialAnswers>;
@@ -50,7 +50,7 @@ export async function GET() {
   }>(`
     SELECT
       qa.id AS attempt_id,
-      u.name AS reviewer_name,
+      u.name AS expert_name,
       qs.id AS set_id,
       qs.name AS set_name,
       qa.answers,
@@ -58,7 +58,7 @@ export async function GET() {
       qa.per_trial_meta,
       qa.status
     FROM qualification_attempts qa
-    JOIN users u ON u.id = qa.reviewer_id
+    JOIN users u ON u.id = qa.expert_id
     JOIN qualification_sets qs ON qs.id = qa.qualification_set_id
   `);
 
@@ -92,10 +92,10 @@ export async function GET() {
 
   const headers = [
     'expert', 'set', 'attempt_status', 'nct_id', 'trial_title',
-    'trial_complete_by_reviewer',
+    'trial_complete_by_expert',
     'block', 'field', 'field_class', 'field_kind',
     'reference_value', 'attempt_value', 'outcome',
-    'reference_notes', 'reference_flags', 'reviewer_notes', 'reviewer_flags',
+    'reference_notes', 'reference_flags', 'expert_notes', 'expert_flags',
   ];
   const rows: unknown[][] = [];
 
@@ -117,7 +117,7 @@ export async function GET() {
           const ref = (refBlock[fieldKey] ?? null) as FieldValue;
           const att2 = (attBlock[fieldKey] ?? null) as FieldValue;
           rows.push([
-            att.reviewer_name, att.set_name, att.status,
+            att.expert_name, att.set_name, att.status,
             refNctId, trial.brief_title,
             completedSet.has(refNctId),
             blockKey, fieldKey, def.class, def.kind,

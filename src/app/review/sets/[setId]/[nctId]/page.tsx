@@ -14,7 +14,7 @@ export default async function ReferenceKeyPage({
   const { setId, nctId } = await params;
   const session = await readSession();
   if (!session) redirect('/login');
-  if (session.role !== 'expert') redirect('/expert');
+  if (session.role !== 'reviewer') redirect('/expert');
 
   const [sets, trials, keys] = await Promise.all([
     query<QualificationSetRow>(`SELECT * FROM qualification_sets WHERE id = $1`, [setId]),
@@ -22,7 +22,7 @@ export default async function ReferenceKeyPage({
     query<ReferenceKeyRow & { built_by_name: string | null }>(`
       SELECT rk.*, u.name AS built_by_name
       FROM reference_keys rk
-      LEFT JOIN users u ON u.id = rk.built_by_annotator_id
+      LEFT JOIN users u ON u.id = rk.built_by_reviewer_id
       WHERE rk.qualification_set_id = $1 AND rk.nct_id = $2
     `, [setId, nctId]),
   ]);

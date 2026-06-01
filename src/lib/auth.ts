@@ -46,12 +46,12 @@ export async function compareDob(dob: string, hash: string): Promise<boolean> {
 // Passkey check (reviewer role gate)
 // ──────────────────────────────────────────────────────────────────────────
 
-export function annotatorPasskeyConfigured(): boolean {
-  return !!process.env.ANNOTATOR_PASSKEY;
+export function reviewerPasskeyConfigured(): boolean {
+  return !!process.env.REVIEWER_PASSKEY;
 }
 
-export function annotatorPasskeyMatches(input: string): boolean {
-  const expected = process.env.ANNOTATOR_PASSKEY;
+export function reviewerPasskeyMatches(input: string): boolean {
+  const expected = process.env.REVIEWER_PASSKEY;
   if (!expected) return false;
   return input.trim() === expected;
 }
@@ -97,7 +97,7 @@ export async function readSession(): Promise<SessionPayload | null> {
     if (
       typeof payload.userId === 'string' &&
       typeof payload.name === 'string' &&
-      (payload.role === 'expert' || payload.role === 'expert')
+      (payload.role === 'reviewer' || payload.role === 'expert')
     ) {
       return { userId: payload.userId, name: payload.name, role: payload.role };
     }

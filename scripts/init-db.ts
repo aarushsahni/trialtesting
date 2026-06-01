@@ -33,7 +33,7 @@ async function main() {
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL UNIQUE,
-      role TEXT NOT NULL CHECK (role IN ('expert', 'expert')),
+      role TEXT NOT NULL CHECK (role IN ('reviewer', 'expert')),
       dob_hash TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
@@ -88,7 +88,7 @@ async function main() {
       notes TEXT NOT NULL DEFAULT '',
       flags JSONB NOT NULL DEFAULT '{}'::jsonb,
       complete BOOLEAN NOT NULL DEFAULT FALSE,
-      built_by_annotator_id UUID REFERENCES users(id),
+      built_by_reviewer_id UUID REFERENCES users(id),
       built_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (qualification_set_id, nct_id)
     )
@@ -97,7 +97,7 @@ async function main() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS qualification_attempts (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      reviewer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expert_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       qualification_set_id UUID NOT NULL REFERENCES qualification_sets(id) ON DELETE CASCADE,
       schema_version_id UUID NOT NULL REFERENCES schema_versions(id),
       answers JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -108,7 +108,7 @@ async function main() {
       score_data JSONB,
       started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       submitted_at TIMESTAMPTZ,
-      UNIQUE (reviewer_id, qualification_set_id)
+      UNIQUE (expert_id, qualification_set_id)
     )
   `);
 

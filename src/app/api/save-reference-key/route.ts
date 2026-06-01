@@ -10,7 +10,7 @@ export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   const session = await readSession();
-  if (!session || session.role !== 'expert') {
+  if (!session || session.role !== 'reviewer') {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
@@ -31,11 +31,11 @@ export async function POST(req: NextRequest) {
   }
 
   await query(
-    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, built_by_annotator_id, built_at)
+    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, built_by_reviewer_id, built_at)
      VALUES ($1, $2, $3, $4::jsonb, $5, NOW())
      ON CONFLICT (qualification_set_id, nct_id) DO UPDATE
        SET key_data = EXCLUDED.key_data,
-           built_by_annotator_id = EXCLUDED.built_by_annotator_id,
+           built_by_reviewer_id = EXCLUDED.built_by_reviewer_id,
            built_at = NOW()`,
     [body.setId, body.nctId, set.schema_version_id, JSON.stringify(body.data ?? {}), session.userId],
   );

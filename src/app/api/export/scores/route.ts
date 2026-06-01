@@ -1,5 +1,5 @@
 // CSV export: per-expert score summary.
-// Expert-only.
+// Reviewer-only.
 
 import { NextResponse } from 'next/server';
 import { readSession } from '@/lib/auth';
@@ -9,7 +9,7 @@ import { rowsToCsv } from '@/lib/csv';
 export const runtime = 'nodejs';
 
 interface Row {
-  reviewer_name: string;
+  expert_name: string;
   set_name: string;
   status: string;
   started_at: string;
@@ -19,19 +19,19 @@ interface Row {
 
 export async function GET() {
   const session = await readSession();
-  if (!session || session.role !== 'expert') {
+  if (!session || session.role !== 'reviewer') {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
   const rows = await query<Row>(`
     SELECT
-      u.name AS reviewer_name,
+      u.name AS expert_name,
       qs.name AS set_name,
       qa.status,
       qa.started_at,
       qa.submitted_at,
       qa.score_data
     FROM qualification_attempts qa
-    JOIN users u ON u.id = qa.reviewer_id
+    JOIN users u ON u.id = qa.expert_id
     JOIN qualification_sets qs ON qs.id = qa.qualification_set_id
     ORDER BY qa.submitted_at DESC NULLS LAST, qa.started_at DESC
   `);
@@ -46,7 +46,7 @@ export async function GET() {
     const s = r.score_data ?? {};
     const c = s.byClass ?? {};
     return [
-      r.reviewer_name, r.set_name, r.status,
+      r.expert_name, r.set_name, r.status,
       r.started_at, r.submitted_at ?? '',
       s.overallF1 ?? '', s.hardExcludeF1 ?? '', s.passed ?? '',
       s.total?.tp ?? '', s.total?.fp ?? '', s.total?.fn ?? '', s.total?.tn ?? '',

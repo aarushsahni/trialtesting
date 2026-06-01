@@ -2,8 +2,8 @@
 
 import { redirect } from 'next/navigation';
 import {
-  annotatorPasskeyConfigured,
-  annotatorPasskeyMatches,
+  reviewerPasskeyConfigured,
+  reviewerPasskeyMatches,
   clearSession,
   compareDob,
   createSession,
@@ -33,22 +33,22 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
 
   if (!name) return { ok: false, error: 'Name is required.' };
   if (name.length > 80) return { ok: false, error: 'Name too long.' };
-  if (role !== 'expert' && role !== 'expert') {
+  if (role !== 'expert' && role !== 'reviewer') {
     return { ok: false, error: 'Pick a role.' };
   }
 
   const dob = normalizeDob(dobRaw);
   if (!dob) return { ok: false, error: 'Date of birth must be MM/DD/YYYY.' };
 
-  if (role === 'expert') {
-    if (!annotatorPasskeyConfigured()) {
+  if (role === 'reviewer') {
+    if (!reviewerPasskeyConfigured()) {
       return {
         ok: false,
-        error: 'Expert signup is not configured on this server (ANNOTATOR_PASSKEY env var not set). Ask the project lead.',
+        error: 'Reviewer signup is not configured on this server (REVIEWER_PASSKEY env var not set). Ask the project lead.',
       };
     }
-    if (!passkey) return { ok: false, error: 'Expert passkey required.' };
-    if (!annotatorPasskeyMatches(passkey)) {
+    if (!passkey) return { ok: false, error: 'Reviewer passkey required.' };
+    if (!reviewerPasskeyMatches(passkey)) {
       return { ok: false, error: 'Incorrect reviewer passkey.' };
     }
   }
@@ -70,7 +70,7 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
   }
 
   await createSession({ userId: user.id, name: user.name, role: user.role });
-  redirect(user.role === 'expert' ? '/review' : '/expert');
+  redirect(user.role === 'reviewer' ? '/review' : '/expert');
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ export async function loginAction(_prev: ActionResult, formData: FormData): Prom
   if (!dobOk) return { ok: false, error: 'Incorrect date of birth.' };
 
   await createSession({ userId: user.id, name: user.name, role: user.role });
-  redirect(user.role === 'expert' ? '/review' : '/expert');
+  redirect(user.role === 'reviewer' ? '/review' : '/expert');
 }
 
 // ──────────────────────────────────────────────────────────────────────────

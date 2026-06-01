@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 interface AttemptSummary {
   attempt_id: string;
-  reviewer_name: string;
+  expert_name: string;
   set_name: string;
   status: string;
   submitted_at: string | null;
@@ -32,18 +32,18 @@ interface ScoreData {
 export default async function ScoresPage() {
   const session = await readSession();
   if (!session) redirect('/login');
-  if (session.role !== 'expert') redirect('/expert');
+  if (session.role !== 'reviewer') redirect('/expert');
 
   const rows = await query<AttemptSummary>(`
     SELECT
       qa.id AS attempt_id,
-      u.name AS reviewer_name,
+      u.name AS expert_name,
       qs.name AS set_name,
       qa.status,
       qa.submitted_at,
       qa.score_data
     FROM qualification_attempts qa
-    JOIN users u ON u.id = qa.reviewer_id
+    JOIN users u ON u.id = qa.expert_id
     JOIN qualification_sets qs ON qs.id = qa.qualification_set_id
     ORDER BY qa.submitted_at DESC NULLS LAST, qa.started_at DESC
   `);
@@ -52,7 +52,7 @@ export default async function ScoresPage() {
     <div className="min-h-screen bg-slate-50">
       <AppHeader name={session.name} role={session.role} />
       <main className="max-w-6xl mx-auto px-6 py-10">
-        <Link href="/review" className="text-sm text-blue-600 hover:underline">← Expert dashboard</Link>
+        <Link href="/review" className="text-sm text-blue-600 hover:underline">← Reviewer dashboard</Link>
         <div className="mt-3 mb-8 flex items-baseline justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Expert scores</h1>
@@ -99,7 +99,7 @@ function AttemptCard({ row }: { row: AttemptSummary }) {
     <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm shadow-blue-100/30">
       <div className="flex items-baseline justify-between gap-4 mb-3">
         <div>
-          <h3 className="font-semibold text-slate-900">{row.reviewer_name}</h3>
+          <h3 className="font-semibold text-slate-900">{row.expert_name}</h3>
           <p className="text-xs text-slate-500 mt-0.5">{row.set_name}</p>
         </div>
         <StatusPill status={row.status} />
@@ -165,7 +165,7 @@ function AttemptCard({ row }: { row: AttemptSummary }) {
             ? `Submitted ${new Date(row.submitted_at).toLocaleString()}`
             : 'Not submitted yet'}
         </p>
-        <ResetAttemptButton attemptId={row.attempt_id} reviewerName={row.reviewer_name} />
+        <ResetAttemptButton attemptId={row.attempt_id} expertName={row.expert_name} />
       </div>
     </div>
   );

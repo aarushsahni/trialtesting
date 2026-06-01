@@ -1,6 +1,6 @@
 # TEMPO — Physician Annotation Guide
 
-**Purpose.** This guide is for trained physician annotators performing **manual structured extraction** of trial eligibility criteria from ClinicalTrials.gov, to serve as the reference standard against which TEMPO's automated extraction is compared.
+**Purpose.** This guide is for trained physician reviewers performing **manual structured extraction** of trial eligibility criteria from ClinicalTrials.gov, to serve as the reference standard against which TEMPO's automated extraction is compared.
 
 **Scope.** One section per cancer type. For each trial, annotate only the cancer-type block(s) the trial is eligible for. A trial may be eligible for more than one cancer type (e.g., a basket trial) — annotate each applicable block independently.
 
@@ -12,7 +12,7 @@ These rules apply to **every** field unless a field-specific note overrides them
 
 1. **Source of truth.** Annotate from the ClinicalTrials.gov record: the *Eligibility Criteria* section primarily, supplemented by *Conditions*, *Brief Summary*, *Detailed Description*, *Arms/Interventions*, and *Official Title* where the criteria are ambiguous. Do not infer from external knowledge of the drug or sponsor beyond what is needed to interpret the trial's own language.
 
-2. **`null` means the trial does not constrain the field.** If the eligibility criteria neither require nor exclude any value of a field, leave it `null` (record as blank / NA on the annotation form). `null` is **not** "unknown to the annotator" — it is an affirmative judgment that the trial places no constraint on this variable.
+2. **`null` means the trial does not constrain the field.** If the eligibility criteria neither require nor exclude any value of a field, leave it `null` (record as blank / NA on the annotation form). `null` is **not** "unknown to the reviewer" — it is an affirmative judgment that the trial places no constraint on this variable.
 
 3. **Categorical fields are multi-select.** Record **every** value the trial would accept, not just the most prominent. If a trial enrolls both locally advanced and metastatic disease, record both `LOCALLY_ADVANCED` and `METASTATIC`. If the trial accepts essentially all values of the field (no constraint), record `null`, not the full list.
 
@@ -26,9 +26,9 @@ These rules apply to **every** field unless a field-specific note overrides them
 
 8. **Setting-qualified criteria.** When a criterion is qualified by treatment setting ("prior platinum **in the metastatic setting**"), the current schema cannot encode the setting qualifier. Annotate the therapy as required/excluded per the criterion and **flag the trial** in the adjudication notes so the loss of the setting qualifier is recorded.
 
-9. **Disagreement handling.** If the trial language is genuinely ambiguous after reviewing all sections, do not guess to match expected AI behavior. Record your best single interpretation and add a free-text adjudication note. Blinded single-expert adjudication resolves annotator–AI disagreements; consistent annotator notes are essential for that step.
+9. **Disagreement handling.** If the trial language is genuinely ambiguous after reviewing all sections, do not guess to match expected AI behavior. Record your best single interpretation and add a free-text adjudication note. Blinded single-expert adjudication resolves reviewer–AI disagreements; consistent reviewer notes are essential for that step.
 
-10. **Do not normalize toward the AI.** Annotators must not view the AI extraction before completing their own. The comparison is only valid if manual extraction is independent.
+10. **Do not normalize toward the AI.** Reviewers must not view the AI extraction before completing their own. The comparison is only valid if manual extraction is independent.
 
 ---
 
@@ -744,8 +744,8 @@ NCT ID:
 Cancer block:
 Field(s) in question:
 Trial language (verbatim quote, <15 words):
-Annotator interpretation:
+Reviewer interpretation:
 Reason for flag (ambiguous / setting-qualifier lost / both-required-and-excluded / other):
 ```
 
-These notes feed the blinded single-expert adjudication step that resolves annotator–AI disagreements and produces the gold-standard label set.
+These notes feed the blinded single-expert adjudication step that resolves reviewer–AI disagreements and produces the gold-standard label set.

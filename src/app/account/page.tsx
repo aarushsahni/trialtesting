@@ -17,7 +17,7 @@ export default async function AccountPage() {
       <AppHeader name={session.name} role={session.role} />
       <main className="max-w-md mx-auto px-6 py-10">
         <Link
-          href={session.role === 'expert' ? '/review' : '/expert'}
+          href={session.role === 'reviewer' ? '/review' : '/expert'}
           className="text-sm text-blue-600 hover:underline"
         >
           ← Back

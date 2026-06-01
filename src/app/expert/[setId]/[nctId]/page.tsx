@@ -9,7 +9,7 @@ import { parseGuideHelpText } from '@/lib/guide-parser';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ReviewerTrialPage({
+export default async function ExpertTrialPage({
   params,
 }: { params: Promise<{ setId: string; nctId: string }> }) {
   const { setId, nctId } = await params;

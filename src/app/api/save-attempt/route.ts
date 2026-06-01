@@ -17,13 +17,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'attemptId required' }, { status: 400 });
   }
 
-  const rows = await query<{ reviewer_id: string; status: string }>(
-    `SELECT reviewer_id, status FROM qualification_attempts WHERE id = $1`,
+  const rows = await query<{ expert_id: string; status: string }>(
+    `SELECT expert_id, status FROM qualification_attempts WHERE id = $1`,
     [body.attemptId],
   );
   const attempt = rows[0];
   if (!attempt) return NextResponse.json({ error: 'attempt not found' }, { status: 404 });
-  if (attempt.reviewer_id !== session.userId) {
+  if (attempt.expert_id !== session.userId) {
     return NextResponse.json({ error: 'not your attempt' }, { status: 403 });
   }
   if (attempt.status !== 'in_progress') {

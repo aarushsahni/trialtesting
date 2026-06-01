@@ -86,10 +86,10 @@ export default async function GuidePage() {
           <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm shadow-blue-100/30">
             <div className="flex items-baseline justify-between gap-4 mb-2">
               <Link
-                href={session.role === 'expert' ? '/review' : '/expert'}
+                href={session.role === 'reviewer' ? '/review' : '/expert'}
                 className="text-sm text-blue-600 hover:underline"
               >
-                ← {session.role === 'expert' ? 'Expert dashboard' : 'Expert dashboard'}
+                ← {session.role === 'reviewer' ? 'Reviewer dashboard' : 'Expert dashboard'}
               </Link>
               {guide?.edited_at && (
                 <span className="text-xs text-slate-400">
@@ -100,7 +100,7 @@ export default async function GuidePage() {
               )}
             </div>
 
-            {session.role === 'expert' ? (
+            {session.role === 'reviewer' ? (
               <GuideEditor
                 initial={guideMarkdown}
                 headingToId={HEADING_TO_BLOCK}

@@ -17,7 +17,7 @@ export default async function ReviewHome() {
     `SELECT * FROM qualification_sets WHERE locked_at IS NOT NULL ORDER BY locked_at DESC`,
   );
   const attempts = await query<QualificationAttemptRow>(
-    `SELECT * FROM qualification_attempts WHERE reviewer_id = $1`,
+    `SELECT * FROM qualification_attempts WHERE expert_id = $1`,
     [session.userId],
   );
   const attemptBySet = new Map(attempts.map((a) => [a.qualification_set_id, a]));

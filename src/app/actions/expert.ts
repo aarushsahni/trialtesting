@@ -25,7 +25,7 @@ export async function startOrResumeAttempt(setId: string): Promise<ActionResult 
   if (!set.locked_at) return { ok: false, error: 'Set is not locked yet — no test available.' };
 
   const existing = await query<QualificationAttemptRow>(
-    `SELECT * FROM qualification_attempts WHERE reviewer_id = $1 AND qualification_set_id = $2`,
+    `SELECT * FROM qualification_attempts WHERE expert_id = $1 AND qualification_set_id = $2`,
     [session.userId, setId],
   );
   if (existing[0]) {
@@ -33,7 +33,7 @@ export async function startOrResumeAttempt(setId: string): Promise<ActionResult 
   }
 
   const inserted = await query<{ id: string }>(
-    `INSERT INTO qualification_attempts (reviewer_id, qualification_set_id, schema_version_id, answers, status)
+    `INSERT INTO qualification_attempts (expert_id, qualification_set_id, schema_version_id, answers, status)
      VALUES ($1, $2, $3, '{}'::jsonb, 'in_progress')
      RETURNING id`,
     [session.userId, setId, set.schema_version_id],
@@ -55,7 +55,7 @@ export async function saveAttemptMetaAction(opts: {
   );
   const a = rows[0];
   if (!a) return { ok: false, error: 'Attempt not found.' };
-  if (a.reviewer_id !== session.userId) return { ok: false, error: 'Not your attempt.' };
+  if (a.expert_id !== session.userId) return { ok: false, error: 'Not your attempt.' };
   if (a.status !== 'in_progress') return { ok: false, error: 'Attempt is locked.' };
 
   const merged = { ...(a.per_trial_meta ?? {}) };
@@ -82,7 +82,7 @@ export async function markTrialCompleteAction(opts: {
   );
   const a = rows[0];
   if (!a) return { ok: false, error: 'Attempt not found.' };
-  if (a.reviewer_id !== session.userId) return { ok: false, error: 'Not your attempt.' };
+  if (a.expert_id !== session.userId) return { ok: false, error: 'Not your attempt.' };
   if (a.status !== 'in_progress') return { ok: false, error: 'Attempt is locked.' };
 
   const current = new Set(a.completed_nct_ids ?? []);
@@ -111,7 +111,7 @@ export async function saveAttemptAction(opts: {
   );
   const attempt = rows[0];
   if (!attempt) return { ok: false, error: 'Attempt not found.' };
-  if (attempt.reviewer_id !== session.userId) return { ok: false, error: 'Not your attempt.' };
+  if (attempt.expert_id !== session.userId) return { ok: false, error: 'Not your attempt.' };
   if (attempt.status !== 'in_progress') return { ok: false, error: 'Attempt is locked.' };
 
   await query(
@@ -133,7 +133,7 @@ export async function submitAttemptAction(attemptId: string): Promise<ActionResu
   );
   const attempt = rows[0];
   if (!attempt) return { ok: false, error: 'Attempt not found.' };
-  if (attempt.reviewer_id !== session.userId) return { ok: false, error: 'Not your attempt.' };
+  if (attempt.expert_id !== session.userId) return { ok: false, error: 'Not your attempt.' };
   if (attempt.status !== 'in_progress') return { ok: false, error: 'Already submitted.' };
 
   // Submit gate: every trial in the set must be in completed_nct_ids

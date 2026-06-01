@@ -27,7 +27,7 @@ export async function query<T = any>(text: string, params?: any[]): Promise<T[]>
 // Row types
 // ──────────────────────────────────────────────────────────────────────────
 
-export type UserRole = 'expert' | 'expert';
+export type UserRole = 'reviewer' | 'expert';
 
 export interface UserRow {
   id: string;
@@ -79,7 +79,7 @@ export interface ReferenceKeyRow {
   notes: string;
   flags: Record<string, boolean>;
   complete: boolean;
-  built_by_annotator_id: string | null;
+  built_by_reviewer_id: string | null;
   built_at: string;
 }
 
@@ -92,7 +92,7 @@ export type AttemptStatus = 'in_progress' | 'submitted' | 'passed' | 'failed';
 
 export interface QualificationAttemptRow {
   id: string;
-  reviewer_id: string;
+  expert_id: string;
   qualification_set_id: string;
   schema_version_id: string;
   answers: Record<string, unknown>;

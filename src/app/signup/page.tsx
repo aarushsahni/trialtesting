@@ -6,7 +6,7 @@ import SignupForm from './SignupForm';
 export default async function SignupPage() {
   const session = await readSession();
   if (session) {
-    redirect(session.role === 'expert' ? '/review' : '/expert');
+    redirect(session.role === 'reviewer' ? '/review' : '/expert');
   }
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-sky-50 flex items-start justify-center px-6 py-16">

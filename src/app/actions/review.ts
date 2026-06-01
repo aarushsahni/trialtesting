@@ -17,7 +17,7 @@ export async function saveReferenceKeyAction(opts: {
   data: TrialAnswers;
 }): Promise<ActionResult> {
   let session;
-  try { session = await requireSession('expert'); }
+  try { session = await requireSession('reviewer'); }
   catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
 
   const sets = await query<{ id: string; schema_version_id: string; locked_at: string | null; trial_nct_ids: string[] }>(
@@ -32,11 +32,11 @@ export async function saveReferenceKeyAction(opts: {
   }
 
   await query(
-    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, built_by_annotator_id, built_at)
+    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, built_by_reviewer_id, built_at)
      VALUES ($1, $2, $3, $4::jsonb, $5, NOW())
      ON CONFLICT (qualification_set_id, nct_id) DO UPDATE
        SET key_data = EXCLUDED.key_data,
-           built_by_annotator_id = EXCLUDED.built_by_annotator_id,
+           built_by_reviewer_id = EXCLUDED.built_by_reviewer_id,
            built_at = NOW()`,
     [opts.setId, opts.nctId, set.schema_version_id, JSON.stringify(opts.data), session.userId],
   );
@@ -49,7 +49,7 @@ export async function saveReferenceKeyMetaAction(opts: {
   setId: string; nctId: string; notes: string; flags: Record<string, boolean>;
 }): Promise<ActionResult> {
   let session;
-  try { session = await requireSession('expert'); }
+  try { session = await requireSession('reviewer'); }
   catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
 
   const sets = await query<{ schema_version_id: string; locked_at: string | null }>(
@@ -61,12 +61,12 @@ export async function saveReferenceKeyMetaAction(opts: {
 
   // Upsert: if no reference key row exists yet, create an empty one with the meta
   await query(
-    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, notes, flags, built_by_annotator_id, built_at)
+    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, notes, flags, built_by_reviewer_id, built_at)
      VALUES ($1, $2, $3, '{}'::jsonb, $4, $5::jsonb, $6, NOW())
      ON CONFLICT (qualification_set_id, nct_id) DO UPDATE
        SET notes = EXCLUDED.notes,
            flags = EXCLUDED.flags,
-           built_by_annotator_id = EXCLUDED.built_by_annotator_id,
+           built_by_reviewer_id = EXCLUDED.built_by_reviewer_id,
            built_at = NOW()`,
     [opts.setId, opts.nctId, sets[0].schema_version_id, opts.notes, JSON.stringify(opts.flags), session.userId],
   );
@@ -83,7 +83,7 @@ export async function markReferenceKeyCompleteAction(opts: {
   setId: string; nctId: string; complete: boolean;
 }): Promise<ActionResult> {
   let session;
-  try { session = await requireSession('expert'); }
+  try { session = await requireSession('reviewer'); }
   catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
 
   const sets = await query<{ schema_version_id: string; locked_at: string | null }>(
@@ -102,21 +102,21 @@ export async function markReferenceKeyCompleteAction(opts: {
   }
 
   await query(
-    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, complete, built_by_annotator_id, built_at)
+    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, complete, built_by_reviewer_id, built_at)
      VALUES ($1, $2, $3, '{}'::jsonb, $4, $5, NOW())
      ON CONFLICT (qualification_set_id, nct_id) DO UPDATE
        SET complete = EXCLUDED.complete,
-           built_by_annotator_id = EXCLUDED.built_by_annotator_id,
+           built_by_reviewer_id = EXCLUDED.built_by_reviewer_id,
            built_at = NOW()`,
     [opts.setId, opts.nctId, set.schema_version_id, opts.complete, session.userId],
   );
   return { ok: true };
 }
 
-// Save the annotation guide markdown. Expert-only.
+// Save the annotation guide markdown. Reviewer-only.
 export async function saveGuideAction(markdown: string): Promise<ActionResult> {
   let session;
-  try { session = await requireSession('expert'); }
+  try { session = await requireSession('reviewer'); }
   catch { return { ok: false, error: 'Only reviewers can edit the guide.' }; }
 
   if (typeof markdown !== 'string') return { ok: false, error: 'Invalid markdown.' };
@@ -128,7 +128,7 @@ export async function saveGuideAction(markdown: string): Promise<ActionResult> {
 
 // Wipe a expert's attempt entirely. They can retake from scratch.
 export async function resetAttemptAction(attemptId: string): Promise<ActionResult> {
-  try { await requireSession('expert'); }
+  try { await requireSession('reviewer'); }
   catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
 
   const r = await query<{ id: string }>(
@@ -142,7 +142,7 @@ export async function resetAttemptAction(attemptId: string): Promise<ActionResul
 // Lock a set so experts can take it. Requires EVERY trial to have a
 // reference key marked complete.
 export async function lockSetAction(setId: string): Promise<ActionResult> {
-  try { await requireSession('expert'); }
+  try { await requireSession('reviewer'); }
   catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
 
   const sets = await query<{ trial_nct_ids: string[]; locked_at: string | null }>(

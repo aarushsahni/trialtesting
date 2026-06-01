@@ -4,13 +4,13 @@ import { useState } from 'react';
 import { resetAttemptAction } from '@/app/actions/review';
 
 export function ResetAttemptButton({
-  attemptId, reviewerName,
-}: { attemptId: string; reviewerName: string }) {
+  attemptId, expertName,
+}: { attemptId: string; expertName: string }) {
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   async function onClick() {
-    if (!confirm(`Wipe ${reviewerName}'s attempt? They will start the test over from scratch. This cannot be undone.`)) return;
+    if (!confirm(`Wipe ${expertName}'s attempt? They will start the test over from scratch. This cannot be undone.`)) return;
     setPending(true);
     setErr(null);
     const r = await resetAttemptAction(attemptId);

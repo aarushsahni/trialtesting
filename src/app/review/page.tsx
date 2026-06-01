@@ -17,7 +17,7 @@ interface SetSummary {
 export default async function AnnotateHome() {
   const session = await readSession();
   if (!session) redirect('/login');
-  if (session.role !== 'expert') redirect('/expert');
+  if (session.role !== 'reviewer') redirect('/expert');
 
   const sets = await query<SetSummary>(`
     SELECT qs.id, qs.name, qs.locked_at,

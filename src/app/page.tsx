@@ -5,7 +5,7 @@ import { readSession } from '@/lib/auth';
 export default async function HomePage() {
   const session = await readSession();
   if (session) {
-    redirect(session.role === 'expert' ? '/review' : '/expert');
+    redirect(session.role === 'reviewer' ? '/review' : '/expert');
   }
 
   return (
@@ -36,7 +36,7 @@ export default async function HomePage() {
           </h2>
           <p className="text-base lg:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
             Two ways to participate. Experts take a fixed-trial test labeled blind
-            against an expert reference key. Experts build that reference key.
+            against an expert reference key. Reviewers build that reference key.
           </p>
         </section>
 

@@ -13,7 +13,7 @@ import { BlockAnswers, BlockKey, FieldValue, TrialAnswers } from '@/lib/types';
 import { HelpTextMap } from '@/lib/guide-parser';
 
 interface Props {
-  session: { name: string; role: 'expert' };
+  session: { name: string; role: 'reviewer' };
   setId: string;
   setName: string;
   setLocked: boolean;
