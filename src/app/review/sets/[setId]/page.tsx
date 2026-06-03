@@ -29,7 +29,7 @@ export default async function SetDetail({ params }: { params: Promise<{ setId: s
       SELECT qt.* FROM qualification_trials qt
       JOIN qualification_sets qs ON qt.nct_id = ANY(qs.trial_nct_ids)
       WHERE qs.id = $1
-      ORDER BY qt.assigned_blocks[1], qt.nct_id
+      ORDER BY array_position(qs.trial_nct_ids, qt.nct_id)
     `, [setId]),
     query<ReferenceKeyRow & { built_by_name: string | null }>(`
       SELECT rk.*, u.name AS built_by_name

@@ -41,7 +41,7 @@ export default async function TestSetPage({ params }: { params: Promise<{ setId:
     query<QualificationTrialRow>(`
       SELECT * FROM qualification_trials
       WHERE nct_id = ANY($1::text[])
-      ORDER BY assigned_blocks[1], nct_id
+      ORDER BY array_position($1::text[], nct_id)
     `, [set.trial_nct_ids]),
     query<QualificationAttemptRow>(
       `SELECT * FROM qualification_attempts WHERE id = $1`,

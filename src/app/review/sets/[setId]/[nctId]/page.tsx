@@ -36,7 +36,7 @@ export default async function ReferenceKeyPage({
     SELECT qt.nct_id FROM qualification_trials qt
     JOIN qualification_sets qs ON qt.nct_id = ANY(qs.trial_nct_ids)
     WHERE qs.id = $1
-    ORDER BY qt.assigned_blocks[1], qt.nct_id
+    ORDER BY array_position(qs.trial_nct_ids, qt.nct_id)
   `, [setId]);
   const orderedIds = orderedIdRows.map((r) => r.nct_id);
   const idx = orderedIds.indexOf(nctId);
