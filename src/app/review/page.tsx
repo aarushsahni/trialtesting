@@ -10,7 +10,7 @@ interface SetSummary {
   id: string;
   name: string;
   trial_count: number;
-  key_count: number;
+  complete_count: number;
   locked_at: string | null;
 }
 
@@ -23,7 +23,7 @@ export default async function AnnotateHome() {
     SELECT qs.id, qs.name, qs.locked_at,
            array_length(qs.trial_nct_ids, 1) AS trial_count,
            (SELECT COUNT(*) FROM reference_keys rk
-              WHERE rk.qualification_set_id = qs.id)::int AS key_count
+              WHERE rk.qualification_set_id = qs.id AND rk.complete = TRUE)::int AS complete_count
     FROM qualification_sets qs
     ORDER BY qs.created_at DESC
   `);
@@ -58,7 +58,7 @@ export default async function AnnotateHome() {
         ) : (
           <div className="space-y-3">
             {sets.map((s) => {
-              const pct = s.trial_count ? Math.round((s.key_count / s.trial_count) * 100) : 0;
+              const pct = s.trial_count ? Math.round((s.complete_count / s.trial_count) * 100) : 0;
               return (
                 <Link
                   key={s.id}
@@ -69,7 +69,7 @@ export default async function AnnotateHome() {
                     <div>
                       <h3 className="font-semibold text-slate-900">{s.name}</h3>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        {s.trial_count} trials · {s.key_count} reference keys built
+                        {s.trial_count} trials · {s.complete_count} complete
                       </p>
                     </div>
                     {s.locked_at ? (
