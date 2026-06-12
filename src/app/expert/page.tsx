@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { readSession } from '@/lib/auth';
-import { query, QualificationAttemptRow, QualificationSetRow } from '@/lib/db';
+import { query, QualificationAttemptRow, QualificationSetRow, MAX_CORPUS_REVIEWS } from '@/lib/db';
 import { AppHeader } from '@/components/AppHeader';
 
 export const dynamic = 'force-dynamic';
@@ -22,6 +22,28 @@ export default async function ReviewHome() {
   );
   const attemptBySet = new Map(attempts.map((a) => [a.qualification_set_id, a]));
 
+  // Corpus phase: only visible once a reviewer approves this expert.
+  const me = await query<{ corpus_approved_at: string | null }>(
+    `SELECT corpus_approved_at FROM users WHERE id = $1`,
+    [session.userId],
+  );
+  const corpusApproved = !!me[0]?.corpus_approved_at;
+  let corpusStats: { total: number; done: number; mySubmitted: number; myInProgress: number } | null = null;
+  if (corpusApproved) {
+    const stats = await query<{ total: number; done: number; my_submitted: number; my_in_progress: number }>(`
+      SELECT
+        (SELECT COUNT(*) FROM corpus_trials)::int AS total,
+        (SELECT COUNT(*) FROM (
+          SELECT nct_id FROM corpus_reviews WHERE status = 'submitted'
+          GROUP BY nct_id HAVING COUNT(*) >= ${MAX_CORPUS_REVIEWS}
+        ) d)::int AS done,
+        (SELECT COUNT(*) FROM corpus_reviews WHERE expert_id = $1 AND status = 'submitted')::int AS my_submitted,
+        (SELECT COUNT(*) FROM corpus_reviews WHERE expert_id = $1 AND status = 'in_progress')::int AS my_in_progress
+    `, [session.userId]);
+    const s = stats[0];
+    corpusStats = { total: s.total, done: s.done, mySubmitted: s.my_submitted, myInProgress: s.my_in_progress };
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <AppHeader name={session.name} role={session.role} />
@@ -37,6 +59,36 @@ export default async function ReviewHome() {
             the &quot;General annotation rules&quot; section. The ? button at the bottom-right of every trial page has a 7-point cheat sheet.
           </div>
         </div>
+
+        {corpusApproved && corpusStats && (
+          <Link
+            href="/expert/corpus"
+            className="block mb-8 bg-white border-2 border-blue-200 rounded-2xl p-5 shadow-sm shadow-blue-100/40 hover:border-blue-400 transition"
+          >
+            <div className="flex items-baseline justify-between mb-1">
+              <h3 className="font-semibold text-slate-900">Trial corpus annotation</h3>
+              <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-1 rounded">
+                Approved
+              </span>
+            </div>
+            <p className="text-sm text-slate-600">
+              Review AI-prefilled extractions on the production trial set.
+            </p>
+            <div className="mt-3 text-xs text-slate-500 flex gap-4">
+              <span><strong className="text-slate-900">{corpusStats.mySubmitted}</strong> submitted by you</span>
+              {corpusStats.myInProgress > 0 && (
+                <span><strong className="text-amber-700">{corpusStats.myInProgress}</strong> in progress</span>
+              )}
+              <span><strong className="text-slate-900">{corpusStats.done}</strong> / {corpusStats.total} trials fully done</span>
+            </div>
+            <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-blue-500 to-blue-600"
+                style={{ width: `${corpusStats.total ? Math.round((corpusStats.done / corpusStats.total) * 100) : 0}%` }}
+              />
+            </div>
+          </Link>
+        )}
 
         {sets.length === 0 ? (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-sm text-amber-900">

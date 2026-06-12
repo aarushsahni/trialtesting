@@ -23,6 +23,29 @@ export async function query<T = any>(text: string, params?: any[]): Promise<T[]>
   return res.rows as T[];
 }
 
+// Run a callback inside a transaction on a dedicated client. Rolls back on
+// throw, commits on return.
+export async function withTransaction<T>(
+  fn: (q: <R = any>(text: string, params?: any[]) => Promise<R[]>) => Promise<T>,
+): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const q = async <R = any>(text: string, params?: any[]): Promise<R[]> => {
+      const res = await client.query(text, params);
+      return res.rows as R[];
+    };
+    const result = await fn(q);
+    await client.query('COMMIT');
+    return result;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Row types
 // ──────────────────────────────────────────────────────────────────────────
@@ -35,6 +58,8 @@ export interface UserRow {
   role: UserRole;
   dob_hash: string;
   created_at: string;
+  corpus_approved_at: string | null;
+  corpus_approved_by: string | null;
 }
 
 export interface SchemaVersionRow {
@@ -102,4 +127,57 @@ export interface QualificationAttemptRow {
   score_data: Record<string, unknown> | null;
   started_at: string;
   submitted_at: string | null;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Production corpus (post-qualification labeling phase)
+// ──────────────────────────────────────────────────────────────────────────
+
+// Every corpus trial needs this many independent expert reviews to be done.
+export const MAX_CORPUS_REVIEWS = 2;
+
+export interface CorpusTrialRow {
+  nct_id: string;
+  brief_title: string;
+  brief_summary: string | null;
+  detailed_description: string | null;
+  eligibility_raw: string | null;
+  conditions: string[];
+  interventions: string[];
+  ctgov_sex: string | null;
+  ctgov_min_age: string | null;
+  ctgov_max_age: string | null;
+  overall_status: string | null;
+  study_type: string | null;
+  phases: string[] | null;
+  assigned_blocks: string[];
+  ai_answers: Record<string, unknown>;
+  schema_version_id: string | null;
+  position: number;
+  fetched_at: string;
+}
+
+export type CorpusReviewStatus = 'in_progress' | 'submitted';
+
+export interface CorpusReviewRow {
+  id: string;
+  nct_id: string;
+  expert_id: string;
+  answers: Record<string, unknown>;
+  notes: string;
+  flags: Record<string, boolean>;
+  status: CorpusReviewStatus;
+  claimed_at: string;
+  submitted_at: string | null;
+  updated_at: string;
+}
+
+export interface CorpusAdjudicationRow {
+  nct_id: string;
+  block_key: string;
+  field_key: string;
+  // FieldValue wrapped as {"v": ...} so JSON null ≠ SQL NULL
+  final_value: { v: unknown };
+  decided_by: string | null;
+  decided_at: string;
 }

@@ -121,13 +121,77 @@ async function main() {
     )
   `);
 
+  // ── Production corpus (post-qualification labeling phase) ───────────
+
+  // The real trial set the AI extraction is evaluated on. ai_answers holds
+  // the AI's extracted TrialAnswers, used to prefill each expert review.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS corpus_trials (
+      nct_id TEXT PRIMARY KEY,
+      brief_title TEXT NOT NULL,
+      brief_summary TEXT,
+      detailed_description TEXT,
+      eligibility_raw TEXT,
+      conditions TEXT[] NOT NULL DEFAULT '{}',
+      interventions TEXT[] NOT NULL DEFAULT '{}',
+      ctgov_sex TEXT,
+      ctgov_min_age TEXT,
+      ctgov_max_age TEXT,
+      overall_status TEXT,
+      study_type TEXT,
+      phases TEXT[],
+      assigned_blocks TEXT[] NOT NULL,
+      ai_answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+      schema_version_id UUID REFERENCES schema_versions(id),
+      position INT NOT NULL DEFAULT 0,
+      fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // One row per expert × trial. Row existence = a claimed slot (max 2 per
+  // trial, enforced in the claim action). Blind: experts never see each
+  // other's rows. answers starts as a copy of the trial's ai_answers.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS corpus_reviews (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      nct_id TEXT NOT NULL REFERENCES corpus_trials(nct_id) ON DELETE CASCADE,
+      expert_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+      notes TEXT NOT NULL DEFAULT '',
+      flags JSONB NOT NULL DEFAULT '{}'::jsonb,
+      status TEXT NOT NULL DEFAULT 'in_progress'
+        CHECK (status IN ('in_progress', 'submitted')),
+      claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      submitted_at TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (nct_id, expert_id)
+    )
+  `);
+
+  // Reviewer's final call on fields where the two expert reviews disagree.
+  // final_value wraps the FieldValue as {"v": ...} so a JSON null value is
+  // distinguishable from SQL NULL.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS corpus_adjudications (
+      nct_id TEXT NOT NULL REFERENCES corpus_trials(nct_id) ON DELETE CASCADE,
+      block_key TEXT NOT NULL,
+      field_key TEXT NOT NULL,
+      final_value JSONB NOT NULL,
+      decided_by UUID REFERENCES users(id),
+      decided_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (nct_id, block_key, field_key)
+    )
+  `);
+
   // ────────────────────────────────────────────────────────────────────
   // ADD COLUMN IF NOT EXISTS — for forward compatibility when schemas
   // evolve. Keep these in sync with new columns added in CREATE TABLE
   // above. Existing data is preserved; defaults backfill new columns.
   // ────────────────────────────────────────────────────────────────────
 
-  // (no pending column additions — current schema baked into CREATE above)
+  // Reviewer approval gate for the corpus phase (toggled from the scores page)
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS corpus_approved_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS corpus_approved_by UUID REFERENCES users(id)`);
 
   // ────────────────────────────────────────────────────────────────────
   // Seed the annotation guide — only if no row exists yet.

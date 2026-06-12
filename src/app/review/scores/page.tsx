@@ -5,12 +5,15 @@ import { query } from '@/lib/db';
 import { AppHeader } from '@/components/AppHeader';
 import { FieldClass } from '@/lib/types';
 import { ResetAttemptButton } from './ResetAttemptButton';
+import { ApproveExpertButton } from './ApproveExpertButton';
 
 export const dynamic = 'force-dynamic';
 
 interface AttemptSummary {
   attempt_id: string;
+  expert_id: string;
   expert_name: string;
+  corpus_approved_at: string | null;
   set_name: string;
   status: string;
   submitted_at: string | null;
@@ -37,7 +40,9 @@ export default async function ScoresPage() {
   const rows = await query<AttemptSummary>(`
     SELECT
       qa.id AS attempt_id,
+      u.id AS expert_id,
       u.name AS expert_name,
+      u.corpus_approved_at,
       qs.name AS set_name,
       qa.status,
       qa.submitted_at,
@@ -159,13 +164,20 @@ function AttemptCard({ row }: { row: AttemptSummary }) {
         </>
       )}
 
-      <div className="flex items-end justify-between mt-3">
+      <div className="flex items-end justify-between mt-3 gap-4">
         <p className="text-xs text-slate-400">
           {row.submitted_at
             ? `Submitted ${new Date(row.submitted_at).toLocaleString()}`
             : 'Not submitted yet'}
         </p>
-        <ResetAttemptButton attemptId={row.attempt_id} expertName={row.expert_name} />
+        <div className="flex items-center gap-4">
+          <ApproveExpertButton
+            expertId={row.expert_id}
+            expertName={row.expert_name}
+            approvedAt={row.corpus_approved_at}
+          />
+          <ResetAttemptButton attemptId={row.attempt_id} expertName={row.expert_name} />
+        </div>
       </div>
     </div>
   );

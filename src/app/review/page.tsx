@@ -40,12 +40,20 @@ export default async function AnnotateHome() {
               experts can take it.
             </p>
           </div>
-          <Link
-            href="/review/scores"
-            className="text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg hover:border-blue-400 hover:text-blue-700 transition whitespace-nowrap"
-          >
-            Expert scores →
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/review/corpus"
+              className="text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg hover:border-blue-400 hover:text-blue-700 transition whitespace-nowrap"
+            >
+              Trial corpus →
+            </Link>
+            <Link
+              href="/review/scores"
+              className="text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg hover:border-blue-400 hover:text-blue-700 transition whitespace-nowrap"
+            >
+              Expert scores →
+            </Link>
+          </div>
         </div>
 
         {sets.length === 0 ? (
