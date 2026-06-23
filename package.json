@@ -10,9 +10,9 @@
     "init-db": "tsx scripts/init-db.ts",
     "reset-db": "tsx scripts/reset-db.ts",
     "backup": "tsx scripts/backup-db.ts",
-    "seed-qualification": "tsx scripts/seed-qualification-set.ts",
     "seed-from-csv": "tsx scripts/seed-from-csv.ts",
-    "seed-corpus": "tsx scripts/seed-corpus-placeholders.ts"
+    "seed-assignments": "tsx scripts/seed-assignments.ts",
+    "seed-corpus-20": "tsx scripts/seed-corpus-20.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

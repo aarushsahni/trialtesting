@@ -1,0 +1,16 @@
+{
+  "name": "eligibility-labeling",
+  "version": "1.0.0",
+  "description": "Self-contained manual-labeling tool for clinical-trial cohorts and per-cancer-type clinical descriptors. Standalone — no database, no env vars; fetches trial data directly from ClinicalTrials.gov.",
+  "private": true,
+  "scripts": {
+    "start": "tsx server.ts"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

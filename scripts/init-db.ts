@@ -25,10 +25,6 @@ async function main() {
 
   await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
 
-  // ────────────────────────────────────────────────────────────────────
-  // CREATE TABLE IF NOT EXISTS — current schema in full
-  // ────────────────────────────────────────────────────────────────────
-
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -48,19 +44,9 @@ async function main() {
     )
   `);
 
+  // Single global trial catalog. Annotation is fully manual — no AI prefill.
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS qualification_sets (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name TEXT NOT NULL UNIQUE,
-      schema_version_id UUID NOT NULL REFERENCES schema_versions(id),
-      trial_nct_ids TEXT[] NOT NULL,
-      locked_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS qualification_trials (
+    CREATE TABLE IF NOT EXISTS trials (
       nct_id TEXT PRIMARY KEY,
       brief_title TEXT NOT NULL,
       brief_summary TEXT,
@@ -74,41 +60,99 @@ async function main() {
       overall_status TEXT,
       study_type TEXT,
       phases TEXT[],
-      assigned_blocks TEXT[] NOT NULL,
+      assigned_cancer_types TEXT[] NOT NULL,
+      schema_version_id UUID REFERENCES schema_versions(id),
+      position INT NOT NULL DEFAULT 0,
       fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS trials_position_idx ON trials(position, nct_id)`);
+  // Drop the legacy ai_answers column on existing DBs.
+  await pool.query(`ALTER TABLE trials DROP COLUMN IF EXISTS ai_answers`);
 
+  // Per-expert pool. Test trials are the gate that locks the rest.
+  // test_reviewed_at flips when the reviewer marks the expert's submission
+  // for that test trial reviewed; unlock for the expert is derived from the
+  // absence of any unreviewed test-trial assignment.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS trial_assignments (
+      expert_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      nct_id TEXT NOT NULL REFERENCES trials(nct_id) ON DELETE CASCADE,
+      is_test_trial BOOLEAN NOT NULL DEFAULT FALSE,
+      test_reviewed_at TIMESTAMPTZ,
+      test_reviewed_by UUID REFERENCES users(id),
+      assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (expert_id, nct_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS trial_assignments_expert_idx ON trial_assignments(expert_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS trial_assignments_nct_idx ON trial_assignments(nct_id)`);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS trial_assignments_pending_test_idx
+      ON trial_assignments(expert_id)
+      WHERE is_test_trial = TRUE AND test_reviewed_at IS NULL
+  `);
+
+  // Trial-centric annotations. One row per (trial, expert). cohort_map is the
+  // reviewer's mapping from expert cohortKey → reference cohortKey for test
+  // trials — applied before scoring so that the expert and reviewer can name
+  // cohorts independently. score_data is populated at submit time and
+  // recomputed whenever the cohort_map changes.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS annotations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      nct_id TEXT NOT NULL REFERENCES trials(nct_id) ON DELETE CASCADE,
+      expert_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      schema_version_id UUID REFERENCES schema_versions(id),
+      answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+      notes TEXT NOT NULL DEFAULT '',
+      flags JSONB NOT NULL DEFAULT '{}'::jsonb,
+      status TEXT NOT NULL DEFAULT 'in_progress'
+        CHECK (status IN ('in_progress', 'submitted')),
+      cohort_map JSONB NOT NULL DEFAULT '{}'::jsonb,
+      score_data JSONB,
+      scored_at TIMESTAMPTZ,
+      started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      submitted_at TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (nct_id, expert_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS annotations_expert_idx ON annotations(expert_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS annotations_nct_idx ON annotations(nct_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS annotations_status_idx ON annotations(status)`);
+  // Backfill: add cohort_map on existing DBs.
+  await pool.query(`ALTER TABLE annotations ADD COLUMN IF NOT EXISTS cohort_map JSONB NOT NULL DEFAULT '{}'::jsonb`);
+
+  // Reviewer ground truth per trial (re-keyed to nct_id; no set scoping).
   await pool.query(`
     CREATE TABLE IF NOT EXISTS reference_keys (
-      qualification_set_id UUID NOT NULL REFERENCES qualification_sets(id) ON DELETE CASCADE,
-      nct_id TEXT NOT NULL REFERENCES qualification_trials(nct_id),
+      nct_id TEXT PRIMARY KEY REFERENCES trials(nct_id) ON DELETE CASCADE,
       schema_version_id UUID NOT NULL REFERENCES schema_versions(id),
       key_data JSONB NOT NULL DEFAULT '{}'::jsonb,
       notes TEXT NOT NULL DEFAULT '',
       flags JSONB NOT NULL DEFAULT '{}'::jsonb,
       complete BOOLEAN NOT NULL DEFAULT FALSE,
       built_by_reviewer_id UUID REFERENCES users(id),
-      built_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (qualification_set_id, nct_id)
+      built_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
+  // Per-field reviewer adjudication for non-test annotations (replaces
+  // corpus_adjudications). Trial-level fields use the sentinel '__TRIAL__'
+  // (TRIAL_LEVEL_SENTINEL in src/lib/types.ts) for both cohort_key and
+  // cancer_type. final_value wraps the FieldValue as {"v": ...} so JSON null
+  // is distinguishable from SQL NULL.
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS qualification_attempts (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      expert_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      qualification_set_id UUID NOT NULL REFERENCES qualification_sets(id) ON DELETE CASCADE,
-      schema_version_id UUID NOT NULL REFERENCES schema_versions(id),
-      answers JSONB NOT NULL DEFAULT '{}'::jsonb,
-      per_trial_meta JSONB NOT NULL DEFAULT '{}'::jsonb,
-      completed_nct_ids TEXT[] NOT NULL DEFAULT '{}',
-      status TEXT NOT NULL DEFAULT 'in_progress'
-        CHECK (status IN ('in_progress', 'submitted', 'passed', 'failed')),
-      score_data JSONB,
-      started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      submitted_at TIMESTAMPTZ,
-      UNIQUE (expert_id, qualification_set_id)
+    CREATE TABLE IF NOT EXISTS trial_adjudications (
+      nct_id TEXT NOT NULL REFERENCES trials(nct_id) ON DELETE CASCADE,
+      cohort_key TEXT NOT NULL,
+      cancer_type TEXT NOT NULL,
+      field_key TEXT NOT NULL,
+      final_value JSONB NOT NULL,
+      decided_by UUID REFERENCES users(id),
+      decided_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (nct_id, cohort_key, cancer_type, field_key)
     )
   `);
 
@@ -121,83 +165,7 @@ async function main() {
     )
   `);
 
-  // ── Production corpus (post-qualification labeling phase) ───────────
-
-  // The real trial set the AI extraction is evaluated on. ai_answers holds
-  // the AI's extracted TrialAnswers, used to prefill each expert review.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS corpus_trials (
-      nct_id TEXT PRIMARY KEY,
-      brief_title TEXT NOT NULL,
-      brief_summary TEXT,
-      detailed_description TEXT,
-      eligibility_raw TEXT,
-      conditions TEXT[] NOT NULL DEFAULT '{}',
-      interventions TEXT[] NOT NULL DEFAULT '{}',
-      ctgov_sex TEXT,
-      ctgov_min_age TEXT,
-      ctgov_max_age TEXT,
-      overall_status TEXT,
-      study_type TEXT,
-      phases TEXT[],
-      assigned_blocks TEXT[] NOT NULL,
-      ai_answers JSONB NOT NULL DEFAULT '{}'::jsonb,
-      schema_version_id UUID REFERENCES schema_versions(id),
-      position INT NOT NULL DEFAULT 0,
-      fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  // One row per expert × trial. Row existence = a claimed slot (max 2 per
-  // trial, enforced in the claim action). Blind: experts never see each
-  // other's rows. answers starts as a copy of the trial's ai_answers.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS corpus_reviews (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      nct_id TEXT NOT NULL REFERENCES corpus_trials(nct_id) ON DELETE CASCADE,
-      expert_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      answers JSONB NOT NULL DEFAULT '{}'::jsonb,
-      notes TEXT NOT NULL DEFAULT '',
-      flags JSONB NOT NULL DEFAULT '{}'::jsonb,
-      status TEXT NOT NULL DEFAULT 'in_progress'
-        CHECK (status IN ('in_progress', 'submitted')),
-      claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      submitted_at TIMESTAMPTZ,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE (nct_id, expert_id)
-    )
-  `);
-
-  // Reviewer's final call on fields where the two expert reviews disagree.
-  // final_value wraps the FieldValue as {"v": ...} so a JSON null value is
-  // distinguishable from SQL NULL.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS corpus_adjudications (
-      nct_id TEXT NOT NULL REFERENCES corpus_trials(nct_id) ON DELETE CASCADE,
-      block_key TEXT NOT NULL,
-      field_key TEXT NOT NULL,
-      final_value JSONB NOT NULL,
-      decided_by UUID REFERENCES users(id),
-      decided_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (nct_id, block_key, field_key)
-    )
-  `);
-
-  // ────────────────────────────────────────────────────────────────────
-  // ADD COLUMN IF NOT EXISTS — for forward compatibility when schemas
-  // evolve. Keep these in sync with new columns added in CREATE TABLE
-  // above. Existing data is preserved; defaults backfill new columns.
-  // ────────────────────────────────────────────────────────────────────
-
-  // Reviewer approval gate for the corpus phase (toggled from the scores page)
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS corpus_approved_at TIMESTAMPTZ`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS corpus_approved_by UUID REFERENCES users(id)`);
-
-  // ────────────────────────────────────────────────────────────────────
   // Seed the annotation guide — only if no row exists yet.
-  // Preserves any edits made via the UI on existing DBs.
-  // ────────────────────────────────────────────────────────────────────
-
   const seedPath = join(process.cwd(), 'src/lib/annotation-guide.md');
   const seedMarkdown = readFileSync(seedPath, 'utf8');
   const result = await pool.query(

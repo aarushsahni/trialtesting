@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Eligibility Labeling</title>
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --panel: #14181d;
+      --panel-2: #1b2128;
+      --border: #2a323c;
+      --text: #e6e9ee;
+      --muted: #8a93a0;
+      --accent: #4f8cff;
+      --accent-hover: #6aa1ff;
+      --danger: #ff6b6b;
+      --tag: #2d3a4a;
+      --inclusion: #2f6f4d;
+      --exclusion: #7a3a3a;
+      --bin-hover: #1f2a36;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    header h1 {
+      margin: 0 12px 0 0;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    input[type="text"], input[type="number"], select, textarea {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font: inherit;
+    }
+    input[type="text"]#nct { width: 160px; }
+    button {
+      background: var(--accent);
+      border: none;
+      color: white;
+      padding: 7px 12px;
+      border-radius: 6px;
+      font: inherit;
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent-hover); }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    button.secondary { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
+    button.danger { background: transparent; color: var(--danger); border: 1px solid var(--border); }
+    button.tiny { padding: 2px 8px; font-size: 12px; }
+    .status { margin-left: auto; color: var(--muted); font-size: 13px; }
+    .status.error { color: var(--danger); }
+    .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: var(--tag);
+      color: var(--muted);
+    }
+    .badge.labeled { background: #2f6f4d; color: #e6f4ec; }
+    main {
+      display: grid;
+      grid-template-columns: minmax(320px, 1fr) minmax(480px, 1.4fr);
+      gap: 12px;
+      padding: 12px 20px;
+      height: calc(100vh - 60px);
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    section h2 {
+      margin: 0;
+      padding: 10px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .scroll { overflow: auto; padding: 14px; flex: 1; }
+    .empty { color: var(--muted); font-style: italic; }
+    .field { margin-bottom: 12px; }
+    .field-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .field-value { white-space: pre-wrap; word-break: break-word; }
+    .tag {
+      display: inline-block;
+      background: var(--tag);
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin: 2px 4px 2px 0;
+      font-size: 12px;
+    }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+    .row .field { min-width: 90px; margin-bottom: 0; }
+    a { color: var(--accent); }
+    pre {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      margin: 0;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Cohort editor (right column) */
+    .cohort-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 14px;
+      background: var(--panel-2);
+    }
+    .cohort-card .head {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .cohort-card .head input[type="text"] { padding: 4px 8px; }
+    .cohort-card .key-input { width: 130px; font-family: ui-monospace, monospace; }
+    .cohort-card .name-input { flex: 1; }
+    .checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 12px;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--panel);
+    }
+    .checkbox-group label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .descriptors-block {
+      margin-top: 10px;
+      border-top: 1px dashed var(--border);
+      padding-top: 8px;
+    }
+    .descriptors-block details { margin-bottom: 6px; }
+    .descriptors-block summary {
+      cursor: pointer;
+      padding: 4px 0;
+      font-weight: 600;
+      color: var(--accent);
+      font-size: 13px;
+    }
+    .descriptor-field {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 8px;
+      align-items: start;
+      margin: 6px 0;
+      padding: 4px 0;
+    }
+    .descriptor-field .lbl {
+      font-size: 12px;
+      color: var(--muted);
+      padding-top: 4px;
+    }
+    .descriptor-field .lbl[data-has-tip] { cursor: help; border-bottom: 1px dotted var(--muted); display: inline; padding-bottom: 1px; }
+    .descriptor-field select, .descriptor-field input[type="number"] { width: 100%; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Eligibility Labeling</h1>
+    <input id="nct" type="text" placeholder="NCT12345678" />
+    <button id="load">Load</button>
+    <button id="save">Save</button>
+    <span id="labeled-badge" class="badge" style="display:none;">labeled</span>
+    <span id="status" class="status">No trial loaded.</span>
+  </header>
+  <main>
+    <section>
+      <h2>Raw CT.gov data</h2>
+      <div id="raw" class="scroll"><p class="empty">Load an NCT to begin.</p></div>
+    </section>
+    <section>
+      <h2>Cohort editor</h2>
+      <div id="editor" class="scroll"><p class="empty">Cohorts appear here after loading a trial.</p></div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const nctInput = $('nct');
+    const loadBtn = $('load');
+    const saveBtn = $('save');
+    const statusEl = $('status');
+    const labeledBadge = $('labeled-badge');
+    const rawEl = $('raw');
+    const editorEl = $('editor');
+
+    const state = {
+      nctId: '',
+      trial: null,
+      schemas: null,
+      alreadyLabeled: false,
+      saveStatus: 'idle',
+      labelerNote: '',
+      cohorts: [],
+      nextCohortIndex: 1,
+    };
+
+    function setStatus(text, kind = '') {
+      statusEl.textContent = text;
+      statusEl.className = 'status' + (kind === 'error' ? ' error' : '');
+    }
+
+    function setSaveStatus(s) {
+      state.saveStatus = s;
+      const map = {
+        idle: '',
+        dirty: 'unsaved changes',
+        saving: 'saving…',
+        saved: 'saved',
+        error: 'save failed',
+      };
+      saveBtn.textContent = s === 'saving' ? 'Saving…' : 'Save';
+      saveBtn.disabled = s === 'saving';
+      if (s === 'error') setStatus(map[s], 'error');
+      else if (map[s]) setStatus(map[s]);
+    }
+
+    function markDirty() { setSaveStatus('dirty'); }
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
+    function nullOr(v) { return (v === null || v === undefined || v === '' || Number.isNaN(v)) ? null : v; }
+    function parseIntOrNull(v) { if (v === '' || v === null || v === undefined) return null; const n = Number(v); return Number.isFinite(n) ? n : null; }
+
+    async function fetchJson(url, opts = {}) {
+      const res = await fetch(url, opts);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    }
+
+    // ----- Load schemas once -----
+    async function loadSchemas() {
+      state.schemas = await fetchJson('/api/descriptor-schemas');
+    }
+
+    // ----- Trial loading flow -----
+    async function loadTrial(nctId) {
+      if (!/^NCT\d{8}$/.test(nctId)) {
+        setStatus('Enter an NCT id like NCT12345678', 'error');
+        return;
+      }
+      setStatus(`Loading ${nctId}…`);
+      loadBtn.disabled = true;
+      saveBtn.disabled = true;
+      labeledBadge.style.display = 'none';
+      rawEl.innerHTML = '<p class="empty">Loading…</p>';
+      editorEl.innerHTML = '<p class="empty">Loading…</p>';
+      try {
+        const trial = await fetchJson(`/api/trial/${nctId}`);
+        state.nctId = nctId;
+        state.trial = trial;
+        renderRaw();
+
+        let existing = null;
+        try {
+          existing = await fetchJson(`/api/label/${nctId}`);
+        } catch (e) { /* 404 is expected */ }
+
+        if (existing) {
+          state.alreadyLabeled = true;
+          labeledBadge.textContent = 'labeled';
+          labeledBadge.classList.add('labeled');
+          labeledBadge.style.display = '';
+          hydrateFromLabel(existing);
+          setStatus(`Loaded existing label for ${nctId}. Edit as needed and save to overwrite.`);
+        } else {
+          state.alreadyLabeled = false;
+          labeledBadge.style.display = 'none';
+          resetBlankState();
+          setStatus(`Ready to label ${nctId}.`);
+        }
+        renderEditor();
+        setSaveStatus('idle');
+      } catch (err) {
+        setStatus(err.message, 'error');
+        editorEl.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
+      } finally {
+        loadBtn.disabled = false;
+        saveBtn.disabled = false;
+      }
+    }
+
+    function resetBlankState() {
+      state.cohorts = [];
+      state.nextCohortIndex = 1;
+      state.labelerNote = '';
+    }
+
+    function hydrateFromLabel(label) {
+      const se = label.structuredEligibility || {};
+      state.labelerNote = label.labelerNote || '';
+      const labelCohorts = Array.isArray(se.cohorts) ? se.cohorts : [];
+      state.cohorts = labelCohorts.map((c) => ({
+        cohortKey: c.cohortKey,
+        displayName: c.displayName || '',
+        applicableCancerTypes: Array.isArray(c.applicableCancerTypes) ? [...c.applicableCancerTypes] : [],
+        minAge: c.minAge ?? null,
+        maxAge: c.maxAge ?? null,
+        ecogMin: c.ecogMin ?? null,
+        ecogMax: c.ecogMax ?? null,
+        lineOfTherapyMin: c.lineOfTherapyMin ?? null,
+        lineOfTherapyMax: c.lineOfTherapyMax ?? null,
+        descriptors: (label.cohortDescriptors || {})[c.cohortKey] || {},
+      }));
+      state.nextCohortIndex = state.cohorts.length + 1;
+    }
+
+    // ----- Render: raw context (left) -----
+    function renderRaw() {
+      const t = state.trial;
+      if (!t) { rawEl.innerHTML = '<p class="empty">No trial.</p>'; return; }
+      const tagList = (xs) => (xs || []).map(x => `<span class="tag">${escapeHtml(x)}</span>`).join('');
+      rawEl.innerHTML = `
+        <div class="field">
+          <div class="field-label">NCT</div>
+          <div><a href="${escapeHtml(t.ctGovUrl)}" target="_blank">${escapeHtml(t.nctId)}</a></div>
+        </div>
+        <div class="field"><div class="field-label">Brief title</div><div class="field-value">${escapeHtml(t.briefTitle)}</div></div>
+        ${t.officialTitle ? `<div class="field"><div class="field-label">Official title</div><div class="field-value">${escapeHtml(t.officialTitle)}</div></div>` : ''}
+        <div class="field"><div class="field-label">Phase / status</div>${tagList([t.phase, t.status].filter(Boolean))}</div>
+        ${t.conditions?.length ? `<div class="field"><div class="field-label">Conditions</div>${tagList(t.conditions)}</div>` : ''}
+        ${t.interventions?.length ? `<div class="field"><div class="field-label">Interventions</div>${tagList(t.interventions)}</div>` : ''}
+        ${t.briefSummary ? `<div class="field"><div class="field-label">Brief summary</div><div class="field-value">${escapeHtml(t.briefSummary)}</div></div>` : ''}
+        ${t.eligibilityRaw ? `<div class="field"><div class="field-label">Eligibility criteria (raw)</div><div class="field-value">${escapeHtml(t.eligibilityRaw)}</div></div>` : ''}
+      `;
+    }
+
+    // ----- Render: editor (right) -----
+    function renderEditor() {
+      if (!state.schemas) { editorEl.innerHTML = '<p class="empty">Schemas not loaded.</p>'; return; }
+      editorEl.innerHTML = `
+        <div class="field">
+          <div class="field-label">Labeler note (optional)</div>
+          <textarea id="labeler-note" rows="2" style="width:100%;" placeholder="e.g. uncertain about the second cohort's age cap">${escapeHtml(state.labelerNote)}</textarea>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Cohorts (${state.cohorts.length})</div>
+          ${state.cohorts.map((c, i) => renderCohortCard(c, i)).join('')}
+          <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+            <button class="secondary" id="add-cohort">+ Add cohort</button>
+            ${state.cohorts.length > 0 ? `
+              <select id="duplicate-cohort" class="secondary" style="padding:7px 10px;">
+                <option value="">Duplicate cohort…</option>
+                ${state.cohorts.map((c) => {
+                  const label = c.cohortKey + (c.displayName ? ' — ' + c.displayName : '');
+                  return `<option value="${escapeHtml(c.cohortKey)}">${escapeHtml(label)}</option>`;
+                }).join('')}
+              </select>
+            ` : ''}
+          </div>
+        </div>
+      `;
+      wireEditor();
+    }
+
+    function renderCancerTypeCheckboxes(cohortKey, current) {
+      const items = state.schemas.cancerTypes;
+      return `
+        <div class="checkbox-group" data-cancer-group="cohort:${escapeHtml(cohortKey)}">
+          ${items.map(ct => `
+            <label>
+              <input type="checkbox" value="${ct.key}"${current.includes(ct.key) ? ' checked' : ''} />
+              ${escapeHtml(ct.label)}
+            </label>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderCohortCard(c, idx) {
+      const overrideRow = `
+        <div class="row" style="margin-top:6px;">
+          <div class="field"><div class="field-label">Min age</div><input type="number" data-cohort-field="${escapeHtml(c.cohortKey)}|minAge" value="${c.minAge ?? ''}" /></div>
+          <div class="field"><div class="field-label">Max age</div><input type="number" data-cohort-field="${escapeHtml(c.cohortKey)}|maxAge" value="${c.maxAge ?? ''}" /></div>
+          <div class="field"><div class="field-label">ECOG min</div><input type="number" data-cohort-field="${escapeHtml(c.cohortKey)}|ecogMin" value="${c.ecogMin ?? ''}" /></div>
+          <div class="field"><div class="field-label">ECOG max</div><input type="number" data-cohort-field="${escapeHtml(c.cohortKey)}|ecogMax" value="${c.ecogMax ?? ''}" /></div>
+          <div class="field"><div class="field-label">LOT min</div><input type="number" data-cohort-field="${escapeHtml(c.cohortKey)}|lineOfTherapyMin" value="${c.lineOfTherapyMin ?? ''}" /></div>
+          <div class="field"><div class="field-label">LOT max</div><input type="number" data-cohort-field="${escapeHtml(c.cohortKey)}|lineOfTherapyMax" value="${c.lineOfTherapyMax ?? ''}" /></div>
+        </div>
+      `;
+      return `
+        <div class="cohort-card" data-cohort-card="${escapeHtml(c.cohortKey)}">
+          <div class="head">
+            <input type="text" class="key-input" data-cohort-key-edit="${escapeHtml(c.cohortKey)}" value="${escapeHtml(c.cohortKey)}" />
+            <input type="text" class="name-input" data-cohort-name="${escapeHtml(c.cohortKey)}" placeholder="Display name" value="${escapeHtml(c.displayName)}" />
+            <button class="danger tiny" data-cohort-del="${escapeHtml(c.cohortKey)}">Delete</button>
+          </div>
+          <div class="field">
+            <div class="field-label">Applicable cancer types</div>
+            ${renderCancerTypeCheckboxes(c.cohortKey, c.applicableCancerTypes)}
+          </div>
+          ${overrideRow}
+          <div class="descriptors-block">${renderDescriptorsForCohort(c)}</div>
+        </div>
+      `;
+    }
+
+    function renderDescriptorsForCohort(cohort) {
+      const types = cohort.applicableCancerTypes.filter((k) => k !== 'OTHER' && state.schemas.schemas[k]);
+      if (types.length === 0) {
+        return '<p class="empty" style="font-size:12px;">Select an applicable cancer type to fill descriptors.</p>';
+      }
+      return types.map((cancerType) => {
+        const schema = state.schemas.schemas[cancerType];
+        const descMap = state.schemas.fieldDescriptions[cancerType] || {};
+        const values = (cohort.descriptors || {})[cancerType] || {};
+        const fields = Object.entries(schema.fields).map(([fieldName, spec]) =>
+          renderDescriptorField(cohort.cohortKey, cancerType, fieldName, spec, descMap[fieldName] || '', values[fieldName])
+        ).join('');
+        return `
+          <details>
+            <summary>Descriptors · ${escapeHtml(cancerType)}</summary>
+            ${fields}
+          </details>
+        `;
+      }).join('');
+    }
+
+    function renderDescriptorField(cohortKey, cancerType, fieldName, spec, description, value) {
+      const slotName = `${cohortKey}|${cancerType}|${fieldName}`;
+      const tip = description ? ` title="${escapeHtml(description)}" data-has-tip="1"` : '';
+      let control = '';
+      if (spec.kind === 'boolean') {
+        const v = value === true ? 'true' : value === false ? 'false' : '';
+        control = `
+          <select data-desc="${escapeHtml(slotName)}" data-desc-kind="boolean">
+            <option value=""${v === '' ? ' selected' : ''}>—</option>
+            <option value="true"${v === 'true' ? ' selected' : ''}>Yes</option>
+            <option value="false"${v === 'false' ? ' selected' : ''}>No</option>
+          </select>
+        `;
+      } else if (spec.kind === 'numeric') {
+        control = `<input type="number" data-desc="${escapeHtml(slotName)}" data-desc-kind="numeric" value="${value ?? ''}" />`;
+      } else {
+        // categorical or fromAlphabet — multi-select via checkboxes (matches V[] | null shape)
+        const opts = spec.kind === 'categorical' ? spec.values : spec.alphabet;
+        const selected = Array.isArray(value) ? value : [];
+        control = `
+          <div class="checkbox-group" data-desc-multi="${escapeHtml(slotName)}">
+            ${opts.map(v => `
+              <label>
+                <input type="checkbox" value="${escapeHtml(v)}"${selected.includes(v) ? ' checked' : ''} />
+                ${escapeHtml(v)}
+              </label>
+            `).join('')}
+          </div>
+        `;
+      }
+      return `
+        <div class="descriptor-field">
+          <span class="lbl"${tip}>${escapeHtml(fieldName)}</span>
+          <div>${control}</div>
+        </div>
+      `;
+    }
+
+    function wireEditor() {
+      $('labeler-note').addEventListener('input', (e) => { state.labelerNote = e.target.value; markDirty(); });
+      // Cohort edits
+      editorEl.querySelectorAll('[data-cohort-key-edit]').forEach((inp) => {
+        const oldKey = inp.dataset.cohortKeyEdit;
+        inp.addEventListener('change', () => {
+          const newKey = inp.value.trim();
+          if (!newKey || newKey === oldKey) { inp.value = oldKey; return; }
+          if (!/^[A-Z][A-Z0-9_]{0,31}$/.test(newKey)) {
+            setStatus('Cohort key must match /^[A-Z][A-Z0-9_]{0,31}$/', 'error');
+            inp.value = oldKey;
+            return;
+          }
+          if (state.cohorts.some((c) => c.cohortKey === newKey)) {
+            setStatus(`Cohort key ${newKey} already in use`, 'error');
+            inp.value = oldKey;
+            return;
+          }
+          renameCohort(oldKey, newKey);
+          markDirty();
+          renderEditor();
+        });
+      });
+      editorEl.querySelectorAll('[data-cohort-name]').forEach((inp) => {
+        const key = inp.dataset.cohortName;
+        inp.addEventListener('input', () => {
+          const c = state.cohorts.find((x) => x.cohortKey === key);
+          if (c) { c.displayName = inp.value; markDirty(); }
+        });
+      });
+      editorEl.querySelectorAll('[data-cohort-del]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const key = btn.dataset.cohortDel;
+          state.cohorts = state.cohorts.filter((c) => c.cohortKey !== key);
+          markDirty();
+          renderEditor();
+        });
+      });
+      editorEl.querySelectorAll('[data-cohort-field]').forEach((inp) => {
+        inp.addEventListener('input', () => {
+          const [key, field] = inp.dataset.cohortField.split('|');
+          const c = state.cohorts.find((x) => x.cohortKey === key);
+          if (!c) return;
+          c[field] = parseIntOrNull(inp.value);
+          markDirty();
+        });
+      });
+      // Cohort applicable cancer types
+      editorEl.querySelectorAll('[data-cancer-group^="cohort:"]').forEach((group) => {
+        const key = group.dataset.cancerGroup.split(':')[1];
+        group.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+          cb.addEventListener('change', () => {
+            const c = state.cohorts.find((x) => x.cohortKey === key);
+            if (!c) return;
+            if (cb.checked) c.applicableCancerTypes.push(cb.value);
+            else c.applicableCancerTypes = c.applicableCancerTypes.filter((x) => x !== cb.value);
+            if (!c.descriptors) c.descriptors = {};
+            // Clean up descriptors for de-selected cancer types (keep data only for currently-applicable).
+            for (const k of Object.keys(c.descriptors)) {
+              if (!c.applicableCancerTypes.includes(k)) delete c.descriptors[k];
+            }
+            markDirty();
+            renderEditor();
+          });
+        });
+      });
+      // Descriptor controls
+      editorEl.querySelectorAll('[data-desc]').forEach((el) => {
+        el.addEventListener('change', () => {
+          const slot = el.dataset.desc;
+          const [cohortKey, cancerType, fieldName] = slot.split('|');
+          const c = state.cohorts.find((x) => x.cohortKey === cohortKey);
+          if (!c) return;
+          if (!c.descriptors) c.descriptors = {};
+          if (!c.descriptors[cancerType]) c.descriptors[cancerType] = {};
+          const kind = el.dataset.descKind;
+          let v;
+          if (kind === 'boolean') {
+            v = el.value === '' ? null : el.value === 'true';
+          } else if (kind === 'numeric') {
+            v = parseIntOrNull(el.value);
+          }
+          c.descriptors[cancerType][fieldName] = v;
+          markDirty();
+        });
+      });
+      editorEl.querySelectorAll('[data-desc-multi]').forEach((group) => {
+        const slot = group.dataset.descMulti;
+        const [cohortKey, cancerType, fieldName] = slot.split('|');
+        group.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+          cb.addEventListener('change', () => {
+            const c = state.cohorts.find((x) => x.cohortKey === cohortKey);
+            if (!c) return;
+            if (!c.descriptors) c.descriptors = {};
+            if (!c.descriptors[cancerType]) c.descriptors[cancerType] = {};
+            const current = Array.isArray(c.descriptors[cancerType][fieldName]) ? c.descriptors[cancerType][fieldName] : [];
+            const set = new Set(current);
+            if (cb.checked) set.add(cb.value); else set.delete(cb.value);
+            c.descriptors[cancerType][fieldName] = set.size === 0 ? null : Array.from(set);
+            markDirty();
+          });
+        });
+      });
+      const dupSel = $('duplicate-cohort');
+      if (dupSel) {
+        dupSel.addEventListener('change', () => {
+          const sourceKey = dupSel.value;
+          dupSel.value = '';
+          if (!sourceKey) return;
+          const newKey = duplicateCohort(sourceKey);
+          if (!newKey) return;
+          markDirty();
+          renderEditor();
+          setStatus(`Duplicated ${sourceKey} → ${newKey}.`);
+        });
+      }
+      $('add-cohort').addEventListener('click', () => {
+        const key = `COHORT_${state.nextCohortIndex++}`;
+        state.cohorts.push({
+          cohortKey: key,
+          displayName: '',
+          applicableCancerTypes: [],
+          minAge: null, maxAge: null,
+          ecogMin: null, ecogMax: null,
+          lineOfTherapyMin: null, lineOfTherapyMax: null,
+          descriptors: {},
+        });
+        markDirty();
+        renderEditor();
+      });
+    }
+
+    function renameCohort(oldKey, newKey) {
+      const c = state.cohorts.find((x) => x.cohortKey === oldKey);
+      if (c) c.cohortKey = newKey;
+    }
+
+    // Duplicate a cohort end-to-end: applicable cancer types, age/ECOG/LOT
+    // bounds, and descriptors. A fresh COHORT_N key is generated; displayName
+    // gets a " (copy)" suffix when set. Returns the new cohortKey.
+    function duplicateCohort(sourceKey) {
+      const source = state.cohorts.find((c) => c.cohortKey === sourceKey);
+      if (!source) return null;
+      const newKey = `COHORT_${state.nextCohortIndex++}`;
+      state.cohorts.push({
+        cohortKey: newKey,
+        displayName: source.displayName ? `${source.displayName} (copy)` : '',
+        applicableCancerTypes: [...source.applicableCancerTypes],
+        minAge: source.minAge,
+        maxAge: source.maxAge,
+        ecogMin: source.ecogMin,
+        ecogMax: source.ecogMax,
+        lineOfTherapyMin: source.lineOfTherapyMin,
+        lineOfTherapyMax: source.lineOfTherapyMax,
+        descriptors: JSON.parse(JSON.stringify(source.descriptors || {})),
+      });
+      return newKey;
+    }
+
+    // ----- Save -----
+    // Only structural cohort labels are captured. Trial-level cancerTypes is
+    // the de-duped union of cohort applicableCancerTypes (in registry order);
+    // eligibilityScope is inferred from cohort count. Inclusion/exclusion
+    // criteria arrays are intentionally empty — this tool does not label
+    // individual criterion strings.
+    function buildPayload() {
+      const cohorts = state.cohorts.map((c) => ({
+        cohortKey: c.cohortKey,
+        displayName: c.displayName,
+        applicableCancerTypes: c.applicableCancerTypes,
+        inclusionCriteria: [],
+        exclusionCriteria: [],
+        minAge: c.minAge,
+        maxAge: c.maxAge,
+        ecogMin: c.ecogMin,
+        ecogMax: c.ecogMax,
+        lineOfTherapyMin: c.lineOfTherapyMin,
+        lineOfTherapyMax: c.lineOfTherapyMax,
+      }));
+      const cohortDescriptors = {};
+      for (const c of state.cohorts) {
+        cohortDescriptors[c.cohortKey] = c.descriptors || {};
+      }
+      const registryOrder = state.schemas.cancerTypes.map((c) => c.key);
+      const cancerTypeSet = new Set();
+      for (const c of state.cohorts) for (const k of c.applicableCancerTypes) cancerTypeSet.add(k);
+      const cancerTypes = registryOrder.filter((k) => cancerTypeSet.has(k));
+      const eligibilityScope = state.cohorts.length > 1 ? 'MULTI_COHORT' : 'SINGLE_CANCER';
+      const structuredEligibility = {
+        cancerTypes,
+        eligibilityScope,
+        inclusionCriteria: [],
+        exclusionCriteria: [],
+        cohorts,
+      };
+      return {
+        schemaVersion: 1,
+        nctId: state.nctId,
+        labeledAt: new Date().toISOString(),
+        labelerNote: state.labelerNote || '',
+        structuredEligibility,
+        cohortDescriptors,
+      };
+    }
+
+    async function saveLabel() {
+      if (!state.nctId) { setStatus('Load a trial first', 'error'); return; }
+      if (state.cohorts.length === 0) {
+        setStatus('Add at least one cohort before saving.', 'error');
+        return;
+      }
+      setSaveStatus('saving');
+      try {
+        const payload = buildPayload();
+        await fetchJson(`/api/label/${state.nctId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        setSaveStatus('saved');
+        state.alreadyLabeled = true;
+        labeledBadge.textContent = 'labeled';
+        labeledBadge.classList.add('labeled');
+        labeledBadge.style.display = '';
+      } catch (err) {
+        setStatus(err.message, 'error');
+        setSaveStatus('error');
+      }
+    }
+
+    // ----- Buttons -----
+    loadBtn.addEventListener('click', () => loadTrial(nctInput.value.trim().toUpperCase()));
+    nctInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadBtn.click(); });
+    saveBtn.addEventListener('click', saveLabel);
+
+    window.addEventListener('beforeunload', (e) => {
+      if (state.saveStatus === 'dirty') { e.preventDefault(); e.returnValue = ''; }
+    });
+
+    loadSchemas().catch((e) => setStatus('Failed to load schemas: ' + e.message, 'error'));
+  </script>
+</body>
+</html>

@@ -1,52 +1,86 @@
-// v2 type system — keyed on cancer-type "blocks" matching the new schema.
+// v3 type system — two-level annotation: trial-level fields + cohorts.
+// Each cohort lists applicable cancer types; for every applicable cancer type
+// the labeler fills a block of typed descriptor fields (BlockAnswers).
 
-export type BlockKey =
-  | 'prostate'
-  | 'urothelial'
-  | 'rcc'
-  | 'testicular'
-  | 'breast'
-  | 'lung'
-  | 'colorectal'
-  | 'head_and_neck'
-  | 'ovarian'
-  | 'uterine'
-  | 'cervical'
-  | 'melanoma'
-  | 'mesothelioma'
-  | 'gastroesophageal'
-  | 'neuroendocrine'
-  | 'pancreatic'
-  | 'cns'
-  | 'hcc'
-  | 'biliary'
-  | 'mature_b_cell'
-  | 'mature_t_nk_cell'
-  | 'myeloid_neoplasm'
-  | 'precursor_lymphoid'
-  | 'plasma_cell';
+// ──────────────────────────────────────────────────────────────────────────
+// Cancer types
+// ──────────────────────────────────────────────────────────────────────────
 
-export const ALL_BLOCK_KEYS: BlockKey[] = [
-  'prostate', 'urothelial', 'rcc', 'testicular', 'breast', 'lung',
-  'colorectal', 'head_and_neck', 'ovarian', 'uterine', 'cervical',
-  'melanoma', 'mesothelioma', 'gastroesophageal', 'neuroendocrine',
-  'pancreatic', 'cns', 'hcc', 'biliary',
-  'mature_b_cell', 'mature_t_nk_cell', 'myeloid_neoplasm',
-  'precursor_lymphoid', 'plasma_cell',
+export type CancerType =
+  | 'PROSTATE'
+  | 'UROTHELIAL'
+  | 'RCC'
+  | 'TESTICULAR'
+  | 'BREAST'
+  | 'LUNG'
+  | 'COLORECTAL'
+  | 'HEAD_AND_NECK'
+  | 'OVARIAN'
+  | 'UTERINE'
+  | 'CERVICAL'
+  | 'MELANOMA'
+  | 'MESOTHELIOMA'
+  | 'GASTROESOPHAGEAL'
+  | 'NEUROENDOCRINE'
+  | 'PANCREATIC'
+  | 'CNS'
+  | 'HCC'
+  | 'BILIARY'
+  | 'MATURE_B_CELL'
+  | 'MATURE_T_NK_CELL'
+  | 'MYELOID_NEOPLASM'
+  | 'PRECURSOR_LYMPHOID'
+  | 'PLASMA_CELL'
+  | 'OTHER';
+
+export const ALL_CANCER_TYPES: CancerType[] = [
+  'PROSTATE', 'UROTHELIAL', 'RCC', 'TESTICULAR', 'BREAST', 'LUNG',
+  'COLORECTAL', 'HEAD_AND_NECK', 'OVARIAN', 'UTERINE', 'CERVICAL',
+  'MELANOMA', 'MESOTHELIOMA', 'GASTROESOPHAGEAL', 'NEUROENDOCRINE',
+  'PANCREATIC', 'CNS', 'HCC', 'BILIARY',
+  'MATURE_B_CELL', 'MATURE_T_NK_CELL', 'MYELOID_NEOPLASM',
+  'PRECURSOR_LYMPHOID', 'PLASMA_CELL', 'OTHER',
 ];
 
-// Field classification for scoring. Hard-exclude classes (biomarker /
-// prior_therapy / lab_cutoff / accepted_diseases) get the higher F1 bar.
+export const CANCER_TYPE_LABELS: Record<CancerType, string> = {
+  PROSTATE: 'Prostate',
+  UROTHELIAL: 'Urothelial',
+  RCC: 'Renal cell',
+  TESTICULAR: 'Testicular',
+  BREAST: 'Breast',
+  LUNG: 'Lung',
+  COLORECTAL: 'Colorectal',
+  HEAD_AND_NECK: 'Head & Neck',
+  OVARIAN: 'Ovarian',
+  UTERINE: 'Uterine / Endometrial',
+  CERVICAL: 'Cervical',
+  MELANOMA: 'Melanoma',
+  MESOTHELIOMA: 'Mesothelioma',
+  GASTROESOPHAGEAL: 'Gastroesophageal',
+  NEUROENDOCRINE: 'Neuroendocrine',
+  PANCREATIC: 'Pancreatic',
+  CNS: 'CNS',
+  HCC: 'Hepatocellular',
+  BILIARY: 'Biliary',
+  MATURE_B_CELL: 'Mature B-cell',
+  MATURE_T_NK_CELL: 'Mature T/NK-cell',
+  MYELOID_NEOPLASM: 'Myeloid neoplasm',
+  PRECURSOR_LYMPHOID: 'Precursor lymphoid',
+  PLASMA_CELL: 'Plasma cell',
+  OTHER: 'Other (basket)',
+};
+
+// ──────────────────────────────────────────────────────────────────────────
+// Field classification (informational only — drives the per-class breakdown
+// on the reviewer's scores page; not used as a pass-gate threshold).
+// ──────────────────────────────────────────────────────────────────────────
+
 export type FieldClass =
   | 'biomarker'
   | 'prior_therapy'
   | 'lab_cutoff'
   | 'accepted_diseases'
   | 'other';
-
-export const HARD_EXCLUDE_CLASSES: FieldClass[] = [
-  'biomarker', 'prior_therapy', 'lab_cutoff', 'accepted_diseases',
-];
 
 export type FieldKind = 'multi' | 'bool' | 'number';
 
@@ -63,28 +97,76 @@ export interface FieldDef {
 }
 
 export interface BlockDef {
-  key: BlockKey;
+  key: CancerType;
   label: string;
   fields: Record<string, FieldDef>;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Answer / reference-key data shapes
+// Answer shapes
 // ──────────────────────────────────────────────────────────────────────────
 
-// Per-field value: matches the schema's union shape.
+// Per-field value.
 //   multi   -> string[] | null
 //   bool    -> boolean | null
 //   number  -> number | null
 export type FieldValue = string[] | boolean | number | null;
 
-// Per-block answers: { fieldKey: value }
+// Per-cancer-type block of answers: { fieldKey: value }
 export type BlockAnswers = Record<string, FieldValue>;
 
-// Per-trial answers / reference-key payload: { blockKey: BlockAnswers }
-export type TrialAnswers = Partial<Record<BlockKey, BlockAnswers>>;
+// A cohort = a trial subgroup with its own eligibility bounds + a set of
+// applicable cancer types. For each applicable cancer type, the labeler fills
+// a BlockAnswers object. OTHER may appear as a key but its value is always {}.
+export interface Cohort {
+  cohortKey: string;          // canonical id — used for matching during scoring & adjudication
+  displayName: string;
+  applicableCancerTypes: Partial<Record<CancerType, BlockAnswers>>;
+  minAge: number | null;
+  maxAge: number | null;
+  ecogMin: number | null;
+  ecogMax: number | null;
+}
 
-// CT.gov API v2 (subset we use for fetching qualification trials)
+// Top-level annotation payload for one trial. Stored as the value of:
+//   reference_keys.key_data    (reviewer's ground truth)
+//   annotations.answers        (expert's per-trial annotation)
+export interface TrialAnswers {
+  nctId: string;
+  expertId: string | null;        // null for reference keys / AI prefill
+  cancerTypes: CancerType[];      // trial-level applicable cancer types (superset across cohorts)
+  minAge: number | null;
+  maxAge: number | null;
+  ecogMin: number | null;
+  ecogMax: number | null;
+  cohorts: Cohort[];
+}
+
+// Build an empty TrialAnswers for a fresh trial. Caller supplies nctId and
+// any seeding info from CT.gov assigned_cancer_types.
+export function emptyTrialAnswers(nctId: string, expertId: string | null = null): TrialAnswers {
+  return {
+    nctId,
+    expertId,
+    cancerTypes: [],
+    minAge: null,
+    maxAge: null,
+    ecogMin: null,
+    ecogMax: null,
+    cohorts: [],
+  };
+}
+
+// Sentinel value used in trial_adjudications when the adjudicated field is
+// a trial-level field (not scoped to any cohort or cancer type). Stored in
+// both the cohort_key and cancer_type columns. Lives here (rather than db.ts)
+// so non-DB code paths can construct adjudication keys.
+export const TRIAL_LEVEL_SENTINEL = '__TRIAL__';
+
+// ──────────────────────────────────────────────────────────────────────────
+// CT.gov API v2 (subset we use for fetching trials)
+// ──────────────────────────────────────────────────────────────────────────
+
 export interface CTGovStudy {
   protocolSection: {
     identificationModule: { nctId: string; briefTitle: string };

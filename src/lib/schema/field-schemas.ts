@@ -1,8 +1,10 @@
-// v2 field-schema metadata for the 24-block annotation schema.
-// Mirrors the TypeScript schema in 1_schema.md so the UI can render every
-// field generically and the server can score against it.
+// v3 field-schema metadata. Per-cancer-type descriptor blocks. The UI renders
+// every field generically from this metadata and the server scores against it.
+// OTHER is included as a catch-all block with no descriptor fields — it can
+// appear as a value in trial-level cancerTypes[] and as a key in a cohort's
+// applicableCancerTypes, but contributes zero fields to scoring.
 
-import { BlockDef, BlockKey, FieldClass, FieldDef } from '../types';
+import { BlockDef, CancerType, FieldClass, FieldDef } from '../types';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Shared option lists + helpers
@@ -55,7 +57,7 @@ const prostate: BlockDef = (() => {
   const therapies = ['ARPI', 'TAXANE', 'PSMA_RADIOLIGAND', 'PARPI'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'prostate',
+    key: 'PROSTATE',
     label: 'Prostate',
     fields: {
       castrationStatus: { kind: 'multi', label: 'Castration status', options: ['SENSITIVE', 'RESISTANT'], helpText: 'CSPC vs CRPC. mHSPC/mCSPC → SENSITIVE; mCRPC → RESISTANT.', class: 'other' },
@@ -78,7 +80,7 @@ const urothelial: BlockDef = (() => {
   const therapies = ['PLATINUM', 'IMMUNOTHERAPY', 'ENFORTUMAB_VEDOTIN', 'FGFR3_INHIBITOR', 'RADICAL_CYSTECTOMY'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'urothelial',
+    key: 'UROTHELIAL',
     label: 'Urothelial / Bladder',
     fields: {
       diseaseSetting: { kind: 'multi', label: 'Disease setting', options: ['NMIBC', 'MIBC', 'LOCALLY_ADVANCED', 'METASTATIC'], class: 'other' },
@@ -104,7 +106,7 @@ const rcc: BlockDef = (() => {
   const therapies = ['NEPHRECTOMY', 'VEGF_TKI', 'IMMUNOTHERAPY_METASTATIC', 'IMMUNOTHERAPY_ADJUVANT', 'HIF2A_INHIBITOR', 'MTOR_INHIBITOR'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'rcc',
+    key: 'RCC',
     label: 'Renal cell carcinoma',
     fields: {
       histologySubtype: { kind: 'multi', label: 'Histology subtype', options: ['CLEAR_CELL', 'PAPILLARY', 'CHROMOPHOBE', 'OTHER_NON_CLEAR_CELL'], class: 'other' },
@@ -125,7 +127,7 @@ const testicular: BlockDef = (() => {
   const therapies = ['PLATINUM_CHEMOTHERAPY', 'HDCT_ASCT'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'testicular',
+    key: 'TESTICULAR',
     label: 'Testicular / Germ cell',
     fields: {
       histology: { kind: 'multi', label: 'Histology', options: ['SEMINOMA', 'NON_SEMINOMA'], class: 'other' },
@@ -143,7 +145,7 @@ const breast: BlockDef = (() => {
   const therapies = ['ENDOCRINE_THERAPY', 'CDK46_INHIBITOR', 'CHEMOTHERAPY_ADVANCED', 'HER2_DIRECTED_THERAPY', 'ANTIBODY_DRUG_CONJUGATE'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'breast',
+    key: 'BREAST',
     label: 'Breast',
     fields: {
       hrStatus: { kind: 'multi', label: 'HR status', options: POS_NEG, helpText: 'POSITIVE if ER and/or PR ≥1%.', class: 'biomarker' },
@@ -169,7 +171,7 @@ const lung: BlockDef = (() => {
   const therapies = ['PLATINUM_CHEMOTHERAPY', 'IMMUNOTHERAPY', 'TARGETED_THERAPY', 'OSIMERTINIB'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'lung',
+    key: 'LUNG',
     label: 'Lung',
     fields: {
       histology: { kind: 'multi', label: 'Histology', options: ['NSCLC_NONSQUAMOUS', 'NSCLC_SQUAMOUS', 'SCLC'], class: 'other' },
@@ -200,7 +202,7 @@ const colorectal: BlockDef = (() => {
   const therapies = ['FLUOROPYRIMIDINE', 'OXALIPLATIN', 'IRINOTECAN', 'ANTI_EGFR', 'ANTI_VEGF', 'IMMUNOTHERAPY', 'BRAF_COMBINATION_THERAPY'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'colorectal',
+    key: 'COLORECTAL',
     label: 'Colorectal',
     fields: {
       primarySiteSidedness: { kind: 'multi', label: 'Primary site / sidedness', options: ['RIGHT_COLON', 'LEFT_COLON', 'RECTUM'], class: 'other' },
@@ -225,7 +227,7 @@ const head_and_neck: BlockDef = (() => {
   const therapies = ['RADIATION', 'PLATINUM', 'IMMUNOTHERAPY'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'head_and_neck',
+    key: 'HEAD_AND_NECK',
     label: 'Head and neck',
     fields: {
       primarySite: { kind: 'multi', label: 'Primary site', options: ['ORAL_CAVITY', 'OROPHARYNX', 'LARYNX', 'HYPOPHARYNX', 'NASOPHARYNX', 'SALIVARY_GLAND'], class: 'other' },
@@ -246,7 +248,7 @@ const ovarian: BlockDef = (() => {
   const therapies = ['DEBULKING', 'PLATINUM', 'BEVACIZUMAB', 'PARPI'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'ovarian',
+    key: 'OVARIAN',
     label: 'Ovarian / fallopian / primary peritoneal',
     fields: {
       histology: { kind: 'multi', label: 'Histology', options: ['HIGH_GRADE_SEROUS', 'LOW_GRADE_SEROUS', 'MUCINOUS', 'CLEAR_CELL', 'ENDOMETRIOID'], class: 'other' },
@@ -268,7 +270,7 @@ const uterine: BlockDef = (() => {
   const therapies = ['RADIATION', 'PLATINUM', 'IMMUNOTHERAPY'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'uterine',
+    key: 'UTERINE',
     label: 'Uterine',
     fields: {
       histology: { kind: 'multi', label: 'Histology', options: ['ENDOMETRIOID', 'SEROUS', 'CARCINOSARCOMA', 'CLEAR_CELL'], class: 'other' },
@@ -289,7 +291,7 @@ const cervical: BlockDef = (() => {
   const therapies = ['CHEMORADIATION', 'PLATINUM', 'IMMUNOTHERAPY'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'cervical',
+    key: 'CERVICAL',
     label: 'Cervical',
     fields: {
       histology: { kind: 'multi', label: 'Histology', options: ['SQUAMOUS', 'ADENOCARCINOMA', 'ADENOSQUAMOUS'], class: 'other' },
@@ -309,7 +311,7 @@ const melanoma: BlockDef = (() => {
   const therapies = ['IMMUNOTHERAPY', 'BRAF_MEK_INHIBITOR'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'melanoma',
+    key: 'MELANOMA',
     label: 'Melanoma',
     fields: {
       primarySite: { kind: 'multi', label: 'Primary site', options: ['CUTANEOUS', 'MUCOSAL', 'UVEAL', 'ACRAL'], class: 'other' },
@@ -332,7 +334,7 @@ const mesothelioma: BlockDef = (() => {
   const therapies = ['PLATINUM', 'PEMETREXED', 'IMMUNOTHERAPY'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'mesothelioma',
+    key: 'MESOTHELIOMA',
     label: 'Mesothelioma',
     fields: {
       histology: { kind: 'multi', label: 'Histology', options: ['EPITHELIOID', 'SARCOMATOID', 'BIPHASIC'], class: 'other' },
@@ -352,7 +354,7 @@ const gastroesophageal: BlockDef = (() => {
   const therapies = ['FLUOROPYRIMIDINE', 'PLATINUM', 'IMMUNOTHERAPY', 'HER2_DIRECTED_THERAPY'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'gastroesophageal',
+    key: 'GASTROESOPHAGEAL',
     label: 'Gastroesophageal',
     fields: {
       primarySiteHistology: { kind: 'multi', label: 'Primary site + histology', options: ['ESOPHAGEAL_SQUAMOUS', 'ESOPHAGEAL_ADENOCARCINOMA', 'GEJ_ADENOCARCINOMA', 'GASTRIC_ADENOCARCINOMA', 'OTHER'], class: 'other' },
@@ -375,7 +377,7 @@ const neuroendocrine: BlockDef = (() => {
   const therapies = ['SOMATOSTATIN_ANALOG', 'CHEMOTHERAPY', 'PRRT', 'EVEROLIMUS'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'neuroendocrine',
+    key: 'NEUROENDOCRINE',
     label: 'Neuroendocrine',
     fields: {
       primarySite: { kind: 'multi', label: 'Primary site', options: ['PANCREATIC', 'GI_MIDGUT', 'GI_HINDGUT', 'LUNG', 'OTHER'], class: 'other' },
@@ -397,7 +399,7 @@ const pancreatic: BlockDef = (() => {
   const therapies = ['FOLFIRINOX', 'GEMCITABINE_NABPACLITAXEL', 'IMMUNOTHERAPY'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'pancreatic',
+    key: 'PANCREATIC',
     label: 'Pancreatic',
     fields: {
       resectability: { kind: 'multi', label: 'Resectability', options: ['RESECTABLE', 'BORDERLINE', 'LOCALLY_ADVANCED', 'METASTATIC'], class: 'other' },
@@ -419,7 +421,7 @@ const cns: BlockDef = (() => {
   const therapies = ['RADIOTHERAPY', 'TEMOZOLOMIDE', 'BEVACIZUMAB', 'TTFIELDS'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'cns',
+    key: 'CNS',
     label: 'CNS / glioma',
     fields: {
       histology: { kind: 'multi', label: 'Histology', options: ['GLIOBLASTOMA', 'ASTROCYTOMA', 'OLIGODENDROGLIOMA', 'EPENDYMOMA', 'MEDULLOBLASTOMA', 'MENINGIOMA', 'PRIMARY_CNS_LYMPHOMA', 'OTHER'], class: 'other' },
@@ -445,7 +447,7 @@ const hcc: BlockDef = (() => {
   const therapies = ['ATEZOLIZUMAB_BEVACIZUMAB', 'TKI', 'IMMUNOTHERAPY', 'TRANSARTERIAL_THERAPY'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'hcc',
+    key: 'HCC',
     label: 'Hepatocellular carcinoma',
     fields: {
       diseaseSetting: { kind: 'multi', label: 'Disease setting', options: ['RESECTABLE', 'LOCALLY_ADVANCED', 'METASTATIC'], class: 'other' },
@@ -469,7 +471,7 @@ const biliary: BlockDef = (() => {
   const therapies = ['GEMCITABINE_CISPLATIN', 'IMMUNOTHERAPY', 'FGFR_INHIBITOR', 'IDH1_INHIBITOR'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'biliary',
+    key: 'BILIARY',
     label: 'Biliary tract',
     fields: {
       primarySite: { kind: 'multi', label: 'Primary site', options: ['INTRAHEPATIC_CHOLANGIO', 'EXTRAHEPATIC_CHOLANGIO', 'GALLBLADDER', 'AMPULLARY'], class: 'other' },
@@ -493,7 +495,7 @@ const mature_b_cell: BlockDef = (() => {
   const therapies = ['ANTI_CD20', 'ANTI_CD19', 'BTK_INHIBITOR', 'BCL2_INHIBITOR', 'ANTHRACYCLINE', 'BISPECIFIC', 'CAR_T', 'AUTO_TRANSPLANT', 'ALLO_TRANSPLANT'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'mature_b_cell',
+    key: 'MATURE_B_CELL',
     label: 'Mature B-cell lymphoma',
     fields: {
       acceptedDiseases: { kind: 'multi', label: 'Accepted diseases', options: ['DLBCL_NOS', 'HGBCL', 'HGBCL_DH_TH', 'PMBCL', 'DLBCL_LEG_TYPE', 'TCRBCL', 'TRANSFORMED_FL', 'TRANSFORMED_MZL', 'RICHTER', 'FL', 'MCL', 'MZL', 'CHL', 'CLL_SLL', 'WALDENSTROM', 'HCL', 'OTHER'], helpText: 'List every disease subtype the trial enrolls. High-consequence scoping field.', class: 'accepted_diseases' },
@@ -520,7 +522,7 @@ const mature_t_nk_cell: BlockDef = (() => {
   const therapies = ['BRENTUXIMAB', 'MOGAMULIZUMAB', 'CHEMOTHERAPY', 'AUTO_TRANSPLANT', 'ALLO_TRANSPLANT'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'mature_t_nk_cell',
+    key: 'MATURE_T_NK_CELL',
     label: 'Mature T / NK-cell lymphoma',
     fields: {
       acceptedDiseases: { kind: 'multi', label: 'Accepted diseases', options: ['PTCL_NOS', 'AITL', 'ALCL_ALK_POS', 'ALCL_ALK_NEG', 'CTCL_MF', 'CTCL_SS', 'NK_T', 'HSTCL', 'MEITL', 'EATL', 'ATL', 'OTHER'], class: 'accepted_diseases' },
@@ -542,7 +544,7 @@ const myeloid_neoplasm: BlockDef = (() => {
   const therapies = ['HMA', 'VENETOCLAX', 'INTENSIVE_CHEMOTHERAPY', 'FLT3_INHIBITOR', 'IDH_INHIBITOR', 'MENIN_INHIBITOR', 'JAK_INHIBITOR', 'BCR_ABL_TKI', 'ALLO_TRANSPLANT'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'myeloid_neoplasm',
+    key: 'MYELOID_NEOPLASM',
     label: 'Myeloid neoplasm',
     fields: {
       acceptedDiseases: { kind: 'multi', label: 'Accepted diseases', options: ['AML', 'MDS', 'CMML', 'MDS_MPN', 'MPN_PV', 'MPN_ET', 'MPN_MF', 'CML', 'OTHER'], class: 'accepted_diseases' },
@@ -580,7 +582,7 @@ const precursor_lymphoid: BlockDef = (() => {
   const therapies = ['BLINATUMOMAB', 'INOTUZUMAB', 'CAR_T', 'BCR_ABL_TKI', 'ALLO_TRANSPLANT'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'precursor_lymphoid',
+    key: 'PRECURSOR_LYMPHOID',
     label: 'Precursor lymphoid (ALL / LBL)',
     fields: {
       acceptedDiseases: { kind: 'multi', label: 'Accepted diseases', options: ['B_ALL', 'T_ALL', 'LBL_B', 'LBL_T', 'OTHER'], class: 'accepted_diseases' },
@@ -604,7 +606,7 @@ const plasma_cell: BlockDef = (() => {
   const therapies = ['IMID', 'PROTEASOME_INHIBITOR', 'ANTI_CD38', 'BCMA_THERAPY', 'BISPECIFIC', 'AUTO_TRANSPLANT', 'ALLO_TRANSPLANT'];
   const pt = priorTherapyPair(therapies);
   return {
-    key: 'plasma_cell',
+    key: 'PLASMA_CELL',
     label: 'Plasma cell',
     fields: {
       acceptedDiseases: { kind: 'multi', label: 'Accepted diseases', options: ['MM', 'PCL', 'PLASMACYTOMA', 'AL_AMYLOIDOSIS', 'WALDENSTROM_LPL', 'POEMS', 'OTHER'], class: 'accepted_diseases' },
@@ -623,36 +625,49 @@ const plasma_cell: BlockDef = (() => {
   };
 })();
 
+// OTHER — basket catch-all. No descriptor fields. Still a valid value in
+// cancerTypes[] and a valid key in cohort.applicableCancerTypes (mapped to
+// {}). Inner field loops naturally yield zero iterations for OTHER.
+const other: BlockDef = {
+  key: 'OTHER',
+  label: 'Other (basket)',
+  fields: {},
+};
+
 // ──────────────────────────────────────────────────────────────────────────
 // Registry
 // ──────────────────────────────────────────────────────────────────────────
 
-export const BLOCKS: Record<BlockKey, BlockDef> = {
-  prostate, urothelial, rcc, testicular, breast, lung, colorectal, head_and_neck,
-  ovarian, uterine, cervical, melanoma, mesothelioma, gastroesophageal,
-  neuroendocrine, pancreatic, cns, hcc, biliary,
-  mature_b_cell, mature_t_nk_cell, myeloid_neoplasm, precursor_lymphoid, plasma_cell,
+export const BLOCKS: Record<CancerType, BlockDef> = {
+  PROSTATE: prostate, UROTHELIAL: urothelial, RCC: rcc, TESTICULAR: testicular,
+  BREAST: breast, LUNG: lung, COLORECTAL: colorectal, HEAD_AND_NECK: head_and_neck,
+  OVARIAN: ovarian, UTERINE: uterine, CERVICAL: cervical, MELANOMA: melanoma,
+  MESOTHELIOMA: mesothelioma, GASTROESOPHAGEAL: gastroesophageal,
+  NEUROENDOCRINE: neuroendocrine, PANCREATIC: pancreatic, CNS: cns, HCC: hcc, BILIARY: biliary,
+  MATURE_B_CELL: mature_b_cell, MATURE_T_NK_CELL: mature_t_nk_cell,
+  MYELOID_NEOPLASM: myeloid_neoplasm, PRECURSOR_LYMPHOID: precursor_lymphoid,
+  PLASMA_CELL: plasma_cell, OTHER: other,
 };
 
 export const ALL_BLOCKS: BlockDef[] = Object.values(BLOCKS);
 
 // Iterate every field in every block with stable identification.
 export function* iterAllFields(): IterableIterator<{
-  block: BlockKey;
+  cancerType: CancerType;
   fieldKey: string;
   def: FieldDef;
 }> {
   for (const block of ALL_BLOCKS) {
     for (const [fieldKey, def] of Object.entries(block.fields)) {
-      yield { block: block.key, fieldKey, def };
+      yield { cancerType: block.key, fieldKey, def };
     }
   }
 }
 
-export function fieldsByClass(klass: FieldClass): Array<{ block: BlockKey; fieldKey: string }> {
-  const out: Array<{ block: BlockKey; fieldKey: string }> = [];
-  for (const { block, fieldKey, def } of iterAllFields()) {
-    if (def.class === klass) out.push({ block, fieldKey });
+export function fieldsByClass(klass: FieldClass): Array<{ cancerType: CancerType; fieldKey: string }> {
+  const out: Array<{ cancerType: CancerType; fieldKey: string }> = [];
+  for (const { cancerType, fieldKey, def } of iterAllFields()) {
+    if (def.class === klass) out.push({ cancerType, fieldKey });
   }
   return out;
 }

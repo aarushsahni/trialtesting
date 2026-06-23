@@ -21,7 +21,7 @@ export function AppHeader({ name, role }: Props) {
           </div>
           <div>
             <div className="text-sm font-semibold text-slate-900 leading-tight group-hover:text-blue-700 transition">
-              Trial Extraction · Qualification
+              Trial Annotation
             </div>
             <div className="text-xs text-slate-500 leading-tight">
               {name} · <span className="capitalize">{role}</span>

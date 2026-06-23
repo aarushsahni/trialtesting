@@ -18,11 +18,12 @@ import { join } from 'node:path';
 const TABLES = [
   'users',
   'schema_versions',
-  'qualification_sets',
-  'qualification_trials',
-  'reference_keys',
-  'qualification_attempts',
   'annotation_guide',
+  'trials',
+  'trial_assignments',
+  'reference_keys',
+  'annotations',
+  'trial_adjudications',
 ];
 
 async function main() {

@@ -1,12 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { FieldEditor } from './FieldEditor';
 import { Tooltip } from './Tooltip';
 import { BLOCKS } from '@/lib/schema/field-schemas';
-import { BlockAnswers, BlockKey, FieldDef, FieldValue } from '@/lib/types';
+import { BlockAnswers, CancerType, FieldDef, FieldValue } from '@/lib/types';
 
 interface Props {
-  blockKey: BlockKey;
+  cancerType: CancerType;
   answers: BlockAnswers;
   onFieldChange: (fieldKey: string, value: FieldValue) => void;
   disabled?: boolean;
@@ -15,9 +16,40 @@ interface Props {
   helpTextByField?: Record<string, string>;
 }
 
-export function BlockSection({ blockKey, answers, onFieldChange, disabled, helpTextByField }: Props) {
-  const block = BLOCKS[blockKey];
+function countPopulated(answers: BlockAnswers, fieldKeys: string[]): number {
+  let n = 0;
+  for (const k of fieldKeys) {
+    const v = answers[k];
+    if (v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0)) n++;
+  }
+  return n;
+}
+
+export function BlockSection({ cancerType, answers, onFieldChange, disabled, helpTextByField }: Props) {
+  const block = BLOCKS[cancerType];
   const fields = Object.entries(block.fields);
+  const [collapsed, setCollapsed] = useState(false);
+
+  // OTHER (basket catch-all) — no descriptor fields. Render a header + caption only.
+  if (fields.length === 0) {
+    return (
+      <section className="bg-white border border-slate-200 rounded-2xl shadow-sm shadow-blue-100/30">
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          className="w-full px-5 py-3 border-b border-slate-100 flex items-center gap-3 hover:bg-slate-50 transition text-left"
+        >
+          <span className="text-slate-600 w-5 text-center text-base leading-none">{collapsed ? '▶' : '▼'}</span>
+          <h3 className="font-semibold text-slate-900">{block.label}</h3>
+        </button>
+        {!collapsed && (
+          <div className="px-5 py-3 text-xs text-slate-500 italic">
+            Basket catch-all — no descriptor fields. Used when a cohort enrolls cancer types beyond the named blocks.
+          </div>
+        )}
+      </section>
+    );
+  }
 
   // Pair priorTherapyRequired + priorTherapyExcluded into one compound widget.
   const required = fields.find(([k]) => k === 'priorTherapyRequired');
@@ -27,41 +59,52 @@ export function BlockSection({ blockKey, answers, onFieldChange, disabled, helpT
     renderedAsPair.add('priorTherapyRequired');
     renderedAsPair.add('priorTherapyExcluded');
   }
+  const populated = countPopulated(answers, fields.map(([k]) => k));
 
   return (
     <section className="bg-white border border-slate-200 rounded-2xl shadow-sm shadow-blue-100/30">
-      <header className="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
-        <span className="w-2 h-2 rounded-full bg-blue-600" />
-        <h3 className="font-semibold text-slate-900">{block.label}</h3>
-      </header>
-      <div className="px-5 py-3 divide-y divide-slate-100">
-        {fields.map(([fieldKey, def]) => {
-          if (renderedAsPair.has(fieldKey)) return null;
-          return (
-            <FieldEditor
-              key={fieldKey}
-              def={def}
-              value={(answers[fieldKey] ?? null) as FieldValue}
-              onChange={(v) => onFieldChange(fieldKey, v)}
-              disabled={disabled}
-              helpTextOverride={helpTextByField?.[fieldKey]}
-            />
-          );
-        })}
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className={
+          'w-full px-5 py-3 flex items-center gap-3 hover:bg-slate-50 transition text-left ' +
+          (collapsed ? '' : 'border-b border-slate-100')
+        }
+      >
+        <span className="text-slate-600 w-5 text-center text-base leading-none">{collapsed ? '▶' : '▼'}</span>
+        <h3 className="font-semibold text-slate-900 flex-1">{block.label}</h3>
+        <span className="text-xs text-slate-500">{populated} / {fields.length} fields</span>
+      </button>
+      {!collapsed && (
+        <div className="px-5 py-3 divide-y divide-slate-100">
+          {fields.map(([fieldKey, def]) => {
+            if (renderedAsPair.has(fieldKey)) return null;
+            return (
+              <FieldEditor
+                key={fieldKey}
+                def={def}
+                value={(answers[fieldKey] ?? null) as FieldValue}
+                onChange={(v) => onFieldChange(fieldKey, v)}
+                disabled={disabled}
+                helpTextOverride={helpTextByField?.[fieldKey]}
+              />
+            );
+          })}
 
-        {required && excluded && (
-          <PriorTherapyPair
-            therapies={(required[1] as FieldDef).options ?? []}
-            required={Array.isArray(answers.priorTherapyRequired) ? (answers.priorTherapyRequired as string[]) : []}
-            excluded={Array.isArray(answers.priorTherapyExcluded) ? (answers.priorTherapyExcluded as string[]) : []}
-            onChange={(r, e) => {
-              onFieldChange('priorTherapyRequired', r.length === 0 ? null : r);
-              onFieldChange('priorTherapyExcluded', e.length === 0 ? null : e);
-            }}
-            disabled={disabled}
-          />
-        )}
-      </div>
+          {required && excluded && (
+            <PriorTherapyPair
+              therapies={(required[1] as FieldDef).options ?? []}
+              required={Array.isArray(answers.priorTherapyRequired) ? (answers.priorTherapyRequired as string[]) : []}
+              excluded={Array.isArray(answers.priorTherapyExcluded) ? (answers.priorTherapyExcluded as string[]) : []}
+              onChange={(r, e) => {
+                onFieldChange('priorTherapyRequired', r.length === 0 ? null : r);
+                onFieldChange('priorTherapyExcluded', e.length === 0 ? null : e);
+              }}
+              disabled={disabled}
+            />
+          )}
+        </div>
+      )}
     </section>
   );
 }

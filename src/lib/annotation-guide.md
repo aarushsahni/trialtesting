@@ -32,6 +32,18 @@ These rules apply to **every** field unless a field-specific note overrides them
 
 ---
 
+## Cohorts and trial-level fields
+
+Each trial is annotated as a top-level object plus one or more **cohorts**. Trial-level fields describe what applies across the entire trial: the cancer type(s) the trial enrolls, the age range, and the ECOG range. Set these from the most general eligibility statements in the protocol (the "all patients" criteria).
+
+A cohort is a subgroup within the trial with its own descriptor values. Single-cancer trials usually have one cohort named `MAIN`. Basket and biomarker-stratified trials have multiple cohorts — one per arm. Each cohort lists which cancer types it accepts (`applicableCancerTypes`); for each accepted cancer type the labeler fills the per-cancer descriptor fields. A cohort can also override age and ECOG with cohort-specific tighter bounds. Cohort keys (`MAIN`, `BIOMARKER_POS`, `PEDIATRIC`, …) are UPPERCASE identifiers — pick a short canonical key per cohort; the display name is the human-readable label.
+
+When the reviewer builds the reference key for a trial, they decide the canonical cohort breakdown. Experts attempting that trial see those cohorts seeded with blank descriptor values — they fill them in. Experts can also add cohorts if they believe the reviewer missed one. Scoring compares cohorts by their `cohortKey` strings: a cohort in the reference but not in the expert (or vice versa) contributes false negatives / false positives field-by-field, exactly as a missed block did under the old schema.
+
+Use `OTHER` in `applicableCancerTypes` only for true basket catch-all cohorts that accept cancer types outside the 24 named blocks; `OTHER` carries no descriptor fields and contributes nothing to field-level scoring.
+
+---
+
 ## Field-type quick reference
 
 | Type in schema | How to record | `null` when |

@@ -1,20 +1,17 @@
-// Fully replace the trial set from a CSV manifest.
+// Populate the `trials` table from a CSV manifest.
 //
 // Reads data/annotator-qualification-trials.csv (columns:
 //   cancer_type,nct_id,official_title,status,phase,primary_completion_date,url)
-// preserving CSV row order, maps each cancer_type to its lowercase BlockKey,
+// preserving CSV row order, validates cancer_type against the CancerType enum,
 // fetches each NCT ID's full study from CT.gov v2, then in ONE transaction:
-//   1. deletes all reference_keys, qualification_attempts, qualification_sets,
-//      qualification_trials (FK-safe order),
-//   2. reuses (or creates) the v1.0 schema_version,
-//   3. inserts the new qualification_trials,
-//   4. creates a qualification set with trial_nct_ids in CSV order.
+//   1. (optionally) deletes annotations, reference_keys, trial_assignments,
+//      trial_adjudications, trials in FK-safe order,
+//   2. reuses (or creates) the schema_version,
+//   3. inserts the new trials with CSV-order `position`.
 //
 // Run:
-//   npm run seed-from-csv
-//
-// WARNING: this is destructive — it wipes all existing trials, sets, reference
-// keys, and attempts. Back up first (npm run backup).
+//   npm run seed-from-csv             (idempotent: skip if trial already exists)
+//   npm run seed-from-csv -- --clean  (destructive: wipe trials + downstream)
 
 import { config } from 'dotenv';
 config({ path: '.env.local' });
@@ -23,22 +20,19 @@ config();
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Pool } from 'pg';
-import { BlockKey, ALL_BLOCK_KEYS, CTGovStudy } from '../src/lib/types';
+import { CancerType, ALL_CANCER_TYPES } from '../src/lib/types';
 import { snapshotSchema } from '../src/lib/schema/field-schemas';
+import { fetchStudy, studyToInsertValues } from '../src/lib/ctgov';
 
-const SET_NAME = process.env.QUALIFICATION_SET_NAME || 'qualification-v1';
-const SCHEMA_VERSION_TAG = process.env.SCHEMA_VERSION_TAG || 'v1.0';
-const BASE_URL = 'https://clinicaltrials.gov/api/v2/studies';
+const SCHEMA_VERSION_TAG = process.env.SCHEMA_VERSION_TAG || 'v2.0';
 const CSV_PATH = join(process.cwd(), 'data', 'annotator-qualification-trials.csv');
+const CLEAN = process.argv.includes('--clean');
 
 interface CsvRow {
   cancerType: string;
   nctId: string;
-  officialTitle: string;
 }
 
-// Minimal CSV parser: handles double-quoted fields with embedded commas and
-// escaped double-quotes (""). Sufficient for the CT.gov manifest format.
 function parseCsvLine(line: string): string[] {
   const out: string[] = [];
   let cur = '';
@@ -47,23 +41,12 @@ function parseCsvLine(line: string): string[] {
     const ch = line[i];
     if (inQuotes) {
       if (ch === '"') {
-        if (line[i + 1] === '"') {
-          cur += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        cur += ch;
-      }
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ',') {
-      out.push(cur);
-      cur = '';
-    } else {
-      cur += ch;
-    }
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += ch;
+    } else if (ch === '"') inQuotes = true;
+    else if (ch === ',') { out.push(cur); cur = ''; }
+    else cur += ch;
   }
   out.push(cur);
   return out;
@@ -73,78 +56,47 @@ function loadCsv(): CsvRow[] {
   const raw = readFileSync(CSV_PATH, 'utf8');
   const lines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
   const header = parseCsvLine(lines[0]).map((h) => h.trim());
-  const idx = {
-    cancer_type: header.indexOf('cancer_type'),
-    nct_id: header.indexOf('nct_id'),
-    official_title: header.indexOf('official_title'),
-  };
-  if (idx.cancer_type < 0 || idx.nct_id < 0) {
+  const idxCt = header.indexOf('cancer_type');
+  const idxId = header.indexOf('nct_id');
+  if (idxCt < 0 || idxId < 0) {
     throw new Error(`CSV missing required columns. Header: ${header.join(', ')}`);
   }
   return lines.slice(1).map((line) => {
     const cells = parseCsvLine(line);
-    return {
-      cancerType: cells[idx.cancer_type].trim(),
-      nctId: cells[idx.nct_id].trim(),
-      officialTitle: idx.official_title >= 0 ? cells[idx.official_title].trim() : '',
-    };
+    return { cancerType: cells[idxCt].trim(), nctId: cells[idxId].trim() };
   });
-}
-
-async function fetchStudy(nctId: string): Promise<CTGovStudy> {
-  const res = await fetch(`${BASE_URL}/${nctId}`, {
-    headers: { Accept: 'application/json' },
-  });
-  if (!res.ok) {
-    throw new Error(`CT.gov error for ${nctId}: ${res.status} ${res.statusText}`);
-  }
-  return (await res.json()) as CTGovStudy;
 }
 
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL not set');
 
-  // 1. Parse CSV (preserving order) and map cancer_type → BlockKey
   const rows = loadCsv();
   console.log(`Loaded ${rows.length} rows from ${CSV_PATH}\n`);
 
-  const blockKeySet = new Set<string>(ALL_BLOCK_KEYS);
-  const planned: { row: CsvRow; block: BlockKey }[] = [];
+  const cancerTypeSet = new Set<string>(ALL_CANCER_TYPES);
+  const planned: { row: CsvRow; cancerType: CancerType }[] = [];
   for (const row of rows) {
-    const block = row.cancerType.toLowerCase() as BlockKey;
-    if (!blockKeySet.has(block)) {
+    const cancerType = row.cancerType as CancerType;
+    if (!cancerTypeSet.has(cancerType)) {
       throw new Error(
-        `Row "${row.nctId}" has cancer_type "${row.cancerType}" which is not a valid BlockKey.`,
+        `Row "${row.nctId}" has cancer_type "${row.cancerType}" which is not a valid CancerType.`,
       );
     }
-    planned.push({ row, block });
+    planned.push({ row, cancerType });
   }
-
-  // 2. Fetch all studies from CT.gov (sequentially, to be polite)
-  const fetched: { study: CTGovStudy; block: BlockKey }[] = [];
-  for (const { row, block } of planned) {
-    process.stdout.write(`Fetching ${row.nctId} [${block}]... `);
-    const study = await fetchStudy(row.nctId);
-    const elig = study.protocolSection.eligibilityModule?.eligibilityCriteria?.trim();
-    console.log(elig ? 'ok' : 'ok (no eligibility text!)');
-    fetched.push({ study, block });
-  }
-  console.log(`\nFetched ${fetched.length} studies.\n`);
 
   const pool = new Pool({
     connectionString: url,
-    ssl:
-      url.includes('sslmode=require') || url.includes('neon.tech')
-        ? { rejectUnauthorized: false }
-        : undefined,
+    ssl: url.includes('sslmode=require') || url.includes('neon.tech')
+      ? { rejectUnauthorized: false }
+      : undefined,
   });
-
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // 3. Reuse or create schema_version
+    // Reuse or create schema_version
     const schemaJson = snapshotSchema();
     let schemaVersionId: string;
     const sv = await client.query(
@@ -163,77 +115,78 @@ async function main() {
       console.log(`Created schema_version ${SCHEMA_VERSION_TAG} (id=${schemaVersionId})`);
     }
 
-    // 4. FULL REPLACE — delete in FK-safe order
-    const delKeys = await client.query(`DELETE FROM reference_keys`);
-    const delAttempts = await client.query(`DELETE FROM qualification_attempts`);
-    const delSets = await client.query(`DELETE FROM qualification_sets`);
-    const delTrials = await client.query(`DELETE FROM qualification_trials`);
-    console.log(
-      `Deleted: ${delKeys.rowCount} reference_keys, ${delAttempts.rowCount} attempts, ` +
-        `${delSets.rowCount} sets, ${delTrials.rowCount} trials.`,
-    );
+    if (CLEAN) {
+      const delAdj = await client.query(`DELETE FROM trial_adjudications`);
+      const delAnn = await client.query(`DELETE FROM annotations`);
+      const delRk = await client.query(`DELETE FROM reference_keys`);
+      const delAsg = await client.query(`DELETE FROM trial_assignments`);
+      const delTr = await client.query(`DELETE FROM trials`);
+      console.log(
+        `Cleaned: ${delAdj.rowCount} adjudications, ${delAnn.rowCount} annotations, ` +
+        `${delRk.rowCount} reference_keys, ${delAsg.rowCount} assignments, ${delTr.rowCount} trials.`,
+      );
+    }
 
-    // 5. Insert new trials (in CSV order)
-    for (const { study, block } of fetched) {
-      const id = study.protocolSection.identificationModule;
-      const desc = study.protocolSection.descriptionModule;
-      const cond = study.protocolSection.conditionsModule;
-      const arms = study.protocolSection.armsInterventionsModule;
-      const elig = study.protocolSection.eligibilityModule;
-      const status = study.protocolSection.statusModule;
-      const design = study.protocolSection.designModule;
+    // Fetch + insert (idempotent: ON CONFLICT do nothing on nct_id PK).
+    let inserted = 0, skipped = 0;
+    for (let i = 0; i < planned.length; i++) {
+      const { row, cancerType } = planned[i];
+      const exists = await client.query(`SELECT 1 FROM trials WHERE nct_id = $1`, [row.nctId]);
+      if (exists.rowCount && !CLEAN) {
+        skipped++;
+        process.stdout.write(`Skipping ${row.nctId} (already in DB)\n`);
+        continue;
+      }
+      process.stdout.write(`Fetching ${row.nctId} [${cancerType}]... `);
+      const study = await fetchStudy(row.nctId);
+      const v = studyToInsertValues(study, [cancerType]);
+      const elig = study.protocolSection.eligibilityModule?.eligibilityCriteria?.trim();
+      console.log(elig ? 'ok' : 'ok (no eligibility text!)');
 
       await client.query(
-        `INSERT INTO qualification_trials (
+        `INSERT INTO trials (
           nct_id, brief_title, brief_summary, detailed_description,
           eligibility_raw, conditions, interventions,
           ctgov_sex, ctgov_min_age, ctgov_max_age,
-          overall_status, study_type, phases, assigned_blocks
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+          overall_status, study_type, phases, assigned_cancer_types,
+          schema_version_id, position
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        ON CONFLICT (nct_id) DO UPDATE SET
+          brief_title = EXCLUDED.brief_title,
+          brief_summary = EXCLUDED.brief_summary,
+          detailed_description = EXCLUDED.detailed_description,
+          eligibility_raw = EXCLUDED.eligibility_raw,
+          conditions = EXCLUDED.conditions,
+          interventions = EXCLUDED.interventions,
+          ctgov_sex = EXCLUDED.ctgov_sex,
+          ctgov_min_age = EXCLUDED.ctgov_min_age,
+          ctgov_max_age = EXCLUDED.ctgov_max_age,
+          overall_status = EXCLUDED.overall_status,
+          study_type = EXCLUDED.study_type,
+          phases = EXCLUDED.phases,
+          assigned_cancer_types = EXCLUDED.assigned_cancer_types,
+          schema_version_id = EXCLUDED.schema_version_id,
+          position = EXCLUDED.position,
+          fetched_at = NOW()`,
         [
-          id.nctId,
-          id.briefTitle,
-          desc?.briefSummary ?? null,
-          desc?.detailedDescription ?? null,
-          elig?.eligibilityCriteria ?? null,
-          cond?.conditions ?? [],
-          (arms?.interventions ?? []).map((i) => i.name),
-          elig?.sex ?? null,
-          elig?.minimumAge ?? null,
-          elig?.maximumAge ?? null,
-          status?.overallStatus ?? null,
-          design?.studyType ?? null,
-          design?.phases ?? null,
-          [block],
+          v.nctId, v.briefTitle, v.briefSummary, v.detailedDescription,
+          v.eligibilityRaw, v.conditions, v.interventions,
+          v.ctgovSex, v.ctgovMinAge, v.ctgovMaxAge,
+          v.overallStatus, v.studyType, v.phases, v.assignedCancerTypes,
+          schemaVersionId, i,
         ],
       );
+      inserted++;
     }
-    console.log(`Inserted ${fetched.length} trials.`);
-
-    // 6. Create qualification set with trial_nct_ids in CSV order
-    const nctIds = fetched.map((f) => f.study.protocolSection.identificationModule.nctId);
-    await client.query(
-      `INSERT INTO qualification_sets (name, schema_version_id, trial_nct_ids)
-       VALUES ($1, $2, $3)`,
-      [SET_NAME, schemaVersionId, nctIds],
-    );
-    console.log(`Created qualification set "${SET_NAME}" with ${nctIds.length} trials.`);
 
     await client.query('COMMIT');
+    console.log(`\nInserted/updated ${inserted} trials, skipped ${skipped}.`);
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;
   } finally {
     client.release();
   }
-
-  // 7. Summary
-  console.log('\nTrials (in order):');
-  fetched.forEach(({ study, block }, i) => {
-    const t = study.protocolSection.identificationModule;
-    const title = t.briefTitle.length > 70 ? t.briefTitle.slice(0, 67) + '...' : t.briefTitle;
-    console.log(`  ${String(i + 1).padStart(2)}. ${t.nctId.padEnd(13)} [${block}]  ${title}`);
-  });
 
   await pool.end();
 }

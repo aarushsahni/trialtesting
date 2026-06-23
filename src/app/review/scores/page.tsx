@@ -4,32 +4,30 @@ import { readSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { AppHeader } from '@/components/AppHeader';
 import { FieldClass } from '@/lib/types';
-import { ResetAttemptButton } from './ResetAttemptButton';
-import { ApproveExpertButton } from './ApproveExpertButton';
+import { ResetAnnotationButton } from './ResetAnnotationButton';
 
 export const dynamic = 'force-dynamic';
 
-interface AttemptSummary {
-  attempt_id: string;
+interface AnnotationSummary {
+  annotation_id: string;
   expert_id: string;
   expert_name: string;
-  corpus_approved_at: string | null;
-  set_name: string;
-  status: string;
+  nct_id: string;
+  brief_title: string;
+  status: 'in_progress' | 'submitted';
   submitted_at: string | null;
+  test_reviewed_at: string | null;
   score_data: ScoreData | null;
 }
 
 interface ScoreData {
   overallF1: number;
-  hardExcludeF1: number;
   passed: boolean;
   passOverallBar: number;
-  passHardBar: number;
   total: { tp: number; fp: number; fn: number; tn: number };
-  hardExclude: { tp: number; fp: number; fn: number; tn: number };
   byClass: Record<FieldClass, { tp: number; fp: number; fn: number; tn: number; f1: number }>;
-  byBlock: Record<string, { tp: number; fp: number; fn: number; tn: number; f1: number }>;
+  byCohort: Record<string, { tp: number; fp: number; fn: number; tn: number; f1: number }>;
+  byCancerType: Record<string, { tp: number; fp: number; fn: number; tn: number; f1: number }>;
 }
 
 export default async function ScoresPage() {
@@ -37,33 +35,43 @@ export default async function ScoresPage() {
   if (!session) redirect('/login');
   if (session.role !== 'reviewer') redirect('/expert');
 
-  const rows = await query<AttemptSummary>(`
+  const rows = await query<AnnotationSummary>(`
     SELECT
-      qa.id AS attempt_id,
+      a.id AS annotation_id,
       u.id AS expert_id,
       u.name AS expert_name,
-      u.corpus_approved_at,
-      qs.name AS set_name,
-      qa.status,
-      qa.submitted_at,
-      qa.score_data
-    FROM qualification_attempts qa
-    JOIN users u ON u.id = qa.expert_id
-    JOIN qualification_sets qs ON qs.id = qa.qualification_set_id
-    ORDER BY qa.submitted_at DESC NULLS LAST, qa.started_at DESC
+      t.nct_id,
+      t.brief_title,
+      a.status,
+      a.submitted_at,
+      ta.test_reviewed_at,
+      a.score_data
+    FROM annotations a
+    JOIN trial_assignments ta ON ta.expert_id = a.expert_id AND ta.nct_id = a.nct_id
+    JOIN users u ON u.id = a.expert_id
+    JOIN trials t ON t.nct_id = a.nct_id
+    WHERE ta.is_test_trial = TRUE
+    ORDER BY u.name, a.submitted_at DESC NULLS LAST, a.started_at DESC
   `);
+
+  // Group by expert
+  const byExpert = new Map<string, { expertName: string; annotations: AnnotationSummary[] }>();
+  for (const r of rows) {
+    const g = byExpert.get(r.expert_id) ?? { expertName: r.expert_name, annotations: [] };
+    g.annotations.push(r);
+    byExpert.set(r.expert_id, g);
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
       <AppHeader name={session.name} role={session.role} />
-      <main className="max-w-6xl mx-auto px-6 py-10">
+      <main className="max-w-5xl mx-auto px-6 py-10">
         <Link href="/review" className="text-sm text-blue-600 hover:underline">← Reviewer dashboard</Link>
         <div className="mt-3 mb-8 flex items-baseline justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Expert scores</h1>
             <p className="text-sm text-slate-600 mt-1">
-              Pass bar: overall F1 ≥ 0.75 <span className="text-slate-400">·</span> hard-exclude F1 ≥ 0.80.
-              Experts don&apos;t see their own scores — only you do.
+              Per-test-trial F1 against the reference key. Pass bar: overall F1 ≥ 0.75. Experts don&apos;t see their own scores.
             </p>
           </div>
           <div className="flex gap-2">
@@ -82,15 +90,35 @@ export default async function ScoresPage() {
           </div>
         </div>
 
-        {rows.length === 0 ? (
+        {byExpert.size === 0 ? (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-sm text-amber-900">
-            No expert attempts yet.
+            No test-trial annotations yet.
           </div>
         ) : (
-          <div className="space-y-3">
-            {rows.map((r) => (
-              <AttemptCard key={r.attempt_id} row={r} />
-            ))}
+          <div className="space-y-6">
+            {Array.from(byExpert.entries()).map(([expertId, group]) => {
+              const submitted = group.annotations.filter((a) => a.status === 'submitted');
+              const avgF1 = submitted.length > 0
+                ? submitted.reduce((acc, r) => acc + (r.score_data?.overallF1 ?? 0), 0) / submitted.length
+                : null;
+              return (
+                <div key={expertId} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm shadow-blue-100/30">
+                  <div className="flex items-baseline justify-between mb-3 gap-4">
+                    <h3 className="font-semibold text-slate-900">{group.expertName}</h3>
+                    {avgF1 !== null && (
+                      <span className="text-sm text-slate-600">
+                        Avg F1: <strong className={`${avgF1 >= 0.75 ? 'text-emerald-700' : 'text-red-700'}`}>{avgF1.toFixed(3)}</strong> across {submitted.length} test{submitted.length === 1 ? '' : 's'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="bg-slate-50 border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-200">
+                    {group.annotations.map((a) => (
+                      <AnnotationRow key={a.annotation_id} a={a} expertName={group.expertName} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </main>
@@ -98,121 +126,33 @@ export default async function ScoresPage() {
   );
 }
 
-function AttemptCard({ row }: { row: AttemptSummary }) {
-  const s = row.score_data;
+function AnnotationRow({ a, expertName }: { a: AnnotationSummary; expertName: string }) {
+  const s = a.score_data;
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm shadow-blue-100/30">
-      <div className="flex items-baseline justify-between gap-4 mb-3">
-        <div>
-          <h3 className="font-semibold text-slate-900">{row.expert_name}</h3>
-          <p className="text-xs text-slate-500 mt-0.5">{row.set_name}</p>
-        </div>
-        <StatusPill status={row.status} />
+    <div className="px-4 py-3 grid grid-cols-[2fr_1fr_1fr_auto] gap-3 items-center text-sm">
+      <div className="min-w-0">
+        <div className="text-xs text-slate-500 font-mono">{a.nct_id}</div>
+        <div className="font-medium text-slate-800 truncate">{a.brief_title}</div>
       </div>
-
-      {row.status === 'in_progress' && (
-        <p className="text-sm text-slate-500">Has started; not yet submitted.</p>
-      )}
-
-      {(row.status === 'passed' || row.status === 'failed' || row.status === 'submitted') && s && (
-        <>
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <MetricBlock
-              label="Overall F1"
-              value={s.overallF1}
-              bar={s.passOverallBar}
-              counters={s.total}
-            />
-            <MetricBlock
-              label="Hard-exclude F1"
-              value={s.hardExcludeF1}
-              bar={s.passHardBar}
-              counters={s.hardExclude}
-            />
-          </div>
-          <details className="text-xs text-slate-600">
-            <summary className="cursor-pointer text-slate-500 hover:text-slate-700">
-              Per-class breakdown
-            </summary>
-            <div className="mt-2 overflow-x-auto">
-              <table className="text-xs w-full">
-                <thead className="text-slate-500">
-                  <tr>
-                    <th className="text-left py-1 pr-3">Class</th>
-                    <th className="text-right py-1 px-2">F1</th>
-                    <th className="text-right py-1 px-2">TP</th>
-                    <th className="text-right py-1 px-2">FP</th>
-                    <th className="text-right py-1 px-2">FN</th>
-                    <th className="text-right py-1 px-2">TN</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(s.byClass).map(([k, v]) => (
-                    <tr key={k} className="border-t border-slate-100">
-                      <td className="py-1 pr-3 font-medium text-slate-700">{k}</td>
-                      <td className="text-right py-1 px-2">{v.f1.toFixed(3)}</td>
-                      <td className="text-right py-1 px-2">{v.tp}</td>
-                      <td className="text-right py-1 px-2">{v.fp}</td>
-                      <td className="text-right py-1 px-2">{v.fn}</td>
-                      <td className="text-right py-1 px-2">{v.tn}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </details>
-        </>
-      )}
-
-      <div className="flex items-end justify-between mt-3 gap-4">
-        <p className="text-xs text-slate-400">
-          {row.submitted_at
-            ? `Submitted ${new Date(row.submitted_at).toLocaleString()}`
-            : 'Not submitted yet'}
-        </p>
-        <div className="flex items-center gap-4">
-          <ApproveExpertButton
-            expertId={row.expert_id}
-            expertName={row.expert_name}
-            approvedAt={row.corpus_approved_at}
-          />
-          <ResetAttemptButton attemptId={row.attempt_id} expertName={row.expert_name} />
-        </div>
+      <div className="text-xs text-slate-600">
+        {s?.overallF1 != null ? (
+          <>
+            F1 <strong className={s.overallF1 >= 0.75 ? 'text-emerald-700' : 'text-red-700'}>
+              {s.overallF1.toFixed(3)}
+            </strong>
+          </>
+        ) : a.status === 'submitted' ? 'Score pending' : 'Not submitted'}
       </div>
-    </div>
-  );
-}
-
-function StatusPill({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    in_progress: 'bg-blue-100 text-blue-700',
-    submitted: 'bg-slate-100 text-slate-700',
-    passed: 'bg-emerald-100 text-emerald-800',
-    failed: 'bg-red-100 text-red-800',
-  };
-  return (
-    <span className={`text-xs font-semibold uppercase tracking-wider px-2 py-1 rounded ${styles[status] ?? 'bg-slate-100 text-slate-700'}`}>
-      {status.replace('_', ' ')}
-    </span>
-  );
-}
-
-function MetricBlock({
-  label, value, bar, counters,
-}: { label: string; value: number; bar: number; counters: { tp: number; fp: number; fn: number; tn: number } }) {
-  const passed = value >= bar;
-  return (
-    <div className={`rounded-xl border p-3 ${passed ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
-      <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">{label}</div>
-      <div className="flex items-baseline gap-2 mt-1">
-        <span className={`text-2xl font-bold ${passed ? 'text-emerald-700' : 'text-red-700'}`}>
-          {value.toFixed(3)}
-        </span>
-        <span className="text-xs text-slate-500">bar ≥ {bar.toFixed(2)}</span>
+      <div className="text-xs">
+        {a.test_reviewed_at ? (
+          <span className="text-emerald-700">Reviewed {new Date(a.test_reviewed_at).toLocaleDateString()}</span>
+        ) : a.status === 'submitted' ? (
+          <span className="text-amber-700">Awaiting review</span>
+        ) : (
+          <span className="text-slate-500">In progress</span>
+        )}
       </div>
-      <div className="text-[10px] text-slate-500 mt-1.5">
-        TP {counters.tp} · FP {counters.fp} · FN {counters.fn} · TN {counters.tn}
-      </div>
+      <ResetAnnotationButton expertId={a.expert_id} nctId={a.nct_id} expertName={expertName} />
     </div>
   );
 }
