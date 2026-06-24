@@ -33,7 +33,7 @@ export function AppHeader({ name, role }: Props) {
             href={dashboardHref}
             className="text-xs px-2.5 py-1 rounded border border-slate-300 text-slate-700 hover:border-blue-400 hover:text-blue-700 transition whitespace-nowrap"
           >
-            ← Trial dashboard
+            ← Dashboard
           </Link>
           <Link
             href="/guide"
