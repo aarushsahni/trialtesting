@@ -16,20 +16,8 @@ export default function SignupForm() {
           Role
         </label>
         <div className="grid grid-cols-2 gap-2">
-          <RoleCard
-            value="expert"
-            current={role}
-            onChange={setRole}
-            label="Expert"
-            sub="Takes the test"
-          />
-          <RoleCard
-            value="reviewer"
-            current={role}
-            onChange={setRole}
-            label="Reviewer"
-            sub="Builds reference key"
-          />
+          <RoleCard value="expert" current={role} onChange={setRole} label="Expert" />
+          <RoleCard value="reviewer" current={role} onChange={setRole} label="Reviewer" />
         </div>
         <input type="hidden" name="role" value={role} />
       </div>
@@ -118,13 +106,12 @@ export default function SignupForm() {
 }
 
 function RoleCard({
-  value, current, onChange, label, sub,
+  value, current, onChange, label,
 }: {
   value: 'expert' | 'reviewer';
   current: 'expert' | 'reviewer';
   onChange: (r: 'expert' | 'reviewer') => void;
   label: string;
-  sub: string;
 }) {
   const selected = current === value;
   return (
@@ -139,7 +126,6 @@ function RoleCard({
       }
     >
       <div className="font-semibold text-slate-900 text-sm">{label}</div>
-      <div className="text-xs text-slate-500 mt-0.5">{sub}</div>
     </button>
   );
 }

@@ -14,11 +14,7 @@ export default async function SignupPage() {
         <Link href="/" className="text-sm text-blue-600 hover:text-blue-700 hover:underline">
           ← Home
         </Link>
-        <h1 className="text-2xl font-bold text-slate-900 mt-4 mb-1">Create an account</h1>
-        <p className="text-sm text-slate-500 mb-6">
-          Pick the role you&apos;ll be working in. Experts take the test; reviewers
-          build the reference key.
-        </p>
+        <h1 className="text-2xl font-bold text-slate-900 mt-4 mb-6">Create an account</h1>
         <SignupForm />
         <p className="text-xs text-slate-500 mt-6 text-center">
           Already have an account?{' '}

@@ -12,16 +12,13 @@ export default async function HomePage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-sky-50">
       <header className="border-b border-blue-100 bg-white/70 backdrop-blur sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold shadow-sm">
-            Q
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-xs shadow-sm">
+            TM
           </div>
           <div>
             <h1 className="text-base font-semibold text-slate-900 leading-tight">
-              Clinical Trial Annotation
+              TEMPO Trial Annotation Platform
             </h1>
-            <p className="text-xs text-slate-500 leading-tight">
-              Sign in to annotate your assigned trials, or build the reference keys
-            </p>
           </div>
         </div>
       </header>
