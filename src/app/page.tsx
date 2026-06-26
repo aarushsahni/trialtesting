@@ -42,30 +42,18 @@ export default async function HomePage() {
             href="/signup"
             className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-100/40 hover:border-blue-400 hover:shadow-blue-100 transition group"
           >
-            <div className="text-xs uppercase tracking-wider text-blue-700 font-semibold mb-2">
-              First time
-            </div>
-            <h3 className="text-xl font-semibold text-slate-900 mb-1 group-hover:text-blue-700 transition">
+            <h3 className="text-xl font-semibold text-slate-900 group-hover:text-blue-700 transition">
               Sign up →
             </h3>
-            <p className="text-sm text-slate-600 leading-relaxed">
-              Create a expert or reviewer account.
-            </p>
           </Link>
 
           <Link
             href="/login"
             className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-100/40 hover:border-blue-400 hover:shadow-blue-100 transition group"
           >
-            <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">
-              Returning
-            </div>
-            <h3 className="text-xl font-semibold text-slate-900 mb-1 group-hover:text-blue-700 transition">
+            <h3 className="text-xl font-semibold text-slate-900 group-hover:text-blue-700 transition">
               Sign in →
             </h3>
-            <p className="text-sm text-slate-600 leading-relaxed">
-              Pick your name and enter your date of birth.
-            </p>
           </Link>
         </div>
       </main>
