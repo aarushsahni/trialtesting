@@ -1,6 +1,6 @@
 'use client';
 
-import { ALL_CANCER_TYPES, CancerType, FieldDef, TrialAnswers } from '@/lib/types';
+import { ALL_CANCER_TYPES, CANCER_TYPE_DEFINITIONS, CancerType, FieldDef, TrialAnswers } from '@/lib/types';
 import { FieldEditor } from './FieldEditor';
 
 interface Props {
@@ -16,6 +16,7 @@ const cancerTypesDef: FieldDef = {
   kind: 'multi',
   label: 'Cancer types',
   options: ALL_CANCER_TYPES,
+  optionHelp: CANCER_TYPE_DEFINITIONS,
   class: 'other',
   helpText: 'All cancer types the trial enrolls. Union of every cohort\'s applicableCancerTypes (the editor does not enforce this — it is informational at the trial level).',
 };

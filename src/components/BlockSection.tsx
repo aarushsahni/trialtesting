@@ -10,22 +10,17 @@ interface Props {
   cancerType: CancerType;
   answers: BlockAnswers;
   onFieldChange: (fieldKey: string, value: FieldValue) => void;
+  /** Atomic multi-field update — required for compound widgets that write
+   *  more than one field per interaction (e.g., PriorTherapyPair). Two
+   *  sequential onFieldChange calls would race on the stale cohort prop. */
+  onFieldsChange?: (updates: Record<string, FieldValue>) => void;
   disabled?: boolean;
   /** Per-field tooltip text, keyed by fieldKey. Comes from the annotation
    *  guide's "What it captures" column. Falls back to FieldDef.helpText. */
   helpTextByField?: Record<string, string>;
 }
 
-function countPopulated(answers: BlockAnswers, fieldKeys: string[]): number {
-  let n = 0;
-  for (const k of fieldKeys) {
-    const v = answers[k];
-    if (v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0)) n++;
-  }
-  return n;
-}
-
-export function BlockSection({ cancerType, answers, onFieldChange, disabled, helpTextByField }: Props) {
+export function BlockSection({ cancerType, answers, onFieldChange, onFieldsChange, disabled, helpTextByField }: Props) {
   const block = BLOCKS[cancerType];
   const fields = Object.entries(block.fields);
   const [collapsed, setCollapsed] = useState(false);
@@ -59,7 +54,6 @@ export function BlockSection({ cancerType, answers, onFieldChange, disabled, hel
     renderedAsPair.add('priorTherapyRequired');
     renderedAsPair.add('priorTherapyExcluded');
   }
-  const populated = countPopulated(answers, fields.map(([k]) => k));
 
   return (
     <section className="bg-white border border-slate-200 rounded-2xl shadow-sm shadow-blue-100/30">
@@ -73,7 +67,6 @@ export function BlockSection({ cancerType, answers, onFieldChange, disabled, hel
       >
         <span className="text-slate-600 w-5 text-center text-base leading-none">{collapsed ? '▶' : '▼'}</span>
         <h3 className="font-semibold text-slate-900 flex-1">{block.label}</h3>
-        <span className="text-xs text-slate-500">{populated} / {fields.length} fields</span>
       </button>
       {!collapsed && (
         <div className="px-5 py-3 divide-y divide-slate-100">
@@ -94,11 +87,19 @@ export function BlockSection({ cancerType, answers, onFieldChange, disabled, hel
           {required && excluded && (
             <PriorTherapyPair
               therapies={(required[1] as FieldDef).options ?? []}
+              optionHelp={(required[1] as FieldDef).optionHelp}
               required={Array.isArray(answers.priorTherapyRequired) ? (answers.priorTherapyRequired as string[]) : []}
               excluded={Array.isArray(answers.priorTherapyExcluded) ? (answers.priorTherapyExcluded as string[]) : []}
               onChange={(r, e) => {
-                onFieldChange('priorTherapyRequired', r.length === 0 ? null : r);
-                onFieldChange('priorTherapyExcluded', e.length === 0 ? null : e);
+                const updates = {
+                  priorTherapyRequired: r.length === 0 ? null : r,
+                  priorTherapyExcluded: e.length === 0 ? null : e,
+                };
+                if (onFieldsChange) onFieldsChange(updates);
+                else {
+                  onFieldChange('priorTherapyRequired', updates.priorTherapyRequired);
+                  onFieldChange('priorTherapyExcluded', updates.priorTherapyExcluded);
+                }
               }}
               disabled={disabled}
             />
@@ -112,9 +113,10 @@ export function BlockSection({ cancerType, answers, onFieldChange, disabled, hel
 type PriorTherapyState = 'unconstrained' | 'required' | 'excluded';
 
 function PriorTherapyPair({
-  therapies, required, excluded, onChange, disabled,
+  therapies, optionHelp, required, excluded, onChange, disabled,
 }: {
   therapies: string[];
+  optionHelp?: Record<string, string>;
   required: string[];
   excluded: string[];
   onChange: (required: string[], excluded: string[]) => void;
@@ -145,9 +147,11 @@ function PriorTherapyPair({
       <div className="space-y-1.5">
         {therapies.map((t) => {
           const s = stateOf(t);
+          const help = optionHelp?.[t];
+          const name = <span className="text-xs text-slate-700 font-mono">{t}</span>;
           return (
             <div key={t} className="flex items-center justify-between gap-3">
-              <span className="text-xs text-slate-700 font-mono">{t}</span>
+              {help ? <Tooltip text={help}>{name}</Tooltip> : name}
               <div className="inline-flex rounded border border-slate-300 overflow-hidden text-xs">
                 {[
                   { k: 'unconstrained' as const, label: 'Unconstrained' },

@@ -70,6 +70,37 @@ export const CANCER_TYPE_LABELS: Record<CancerType, string> = {
   OTHER: 'Other (basket)',
 };
 
+// Hover-tooltip definitions surfaced when a labeler hovers a cancer-type chip.
+// First-pass clinical scope notes — expert review recommended before relying
+// on these for anything beyond intuition-building.
+export const CANCER_TYPE_DEFINITIONS: Record<CancerType, string> = {
+  PROSTATE: 'Prostate cancer.',
+  UROTHELIAL: 'Urothelial carcinoma of the bladder, upper tract (renal pelvis / ureter), or urethra.',
+  RCC: 'Renal cell carcinoma',
+  TESTICULAR: 'Testicular and extragonadal germ cell tumors (seminoma vs non-seminoma).',
+  BREAST: 'Breast cancer.',
+  LUNG: 'Lung cancer.',
+  COLORECTAL: 'Colorectal cancer.',
+  HEAD_AND_NECK: 'Squamous-cell carcinoma of the head and neck (oral cavity, oropharynx, larynx, hypopharynx, nasopharynx, salivary gland).',
+  OVARIAN: 'Epithelial ovarian, fallopian tube, and primary peritoneal carcinoma.',
+  UTERINE: 'Uterine (endometrial) carcinoma.',
+  CERVICAL: 'Cervical cancer.',
+  MELANOMA: 'Cutaneous, mucosal, acral, or uveal melanoma.',
+  MESOTHELIOMA: 'Mesothelioma of pleura or peritoneum.',
+  GASTROESOPHAGEAL: 'Esophageal (squamous or adenocarcinoma), gastroesophageal junction, and gastric carcinoma.',
+  NEUROENDOCRINE: 'Neuroendocrine neoplasms.',
+  PANCREATIC: 'Pancreatic ductal adenocarcinoma.',
+  CNS: 'Primary CNS tumors - gliomas (glioblastoma, astrocytoma, oligodendroglioma), ependymoma, medulloblastoma, meningioma.',
+  HCC: 'Hepatocellular carcinoma.',
+  BILIARY: 'Biliary tract cancers — intrahepatic and extrahepatic cholangiocarcinoma, gallbladder, ampullary.',
+  MATURE_B_CELL: 'Mature B-cell neoplasms — DLBCL and variants, follicular, mantle cell, marginal zone, CLL/SLL, Waldenström, hairy cell, classical Hodgkin lymphoma.',
+  MATURE_T_NK_CELL: 'Mature T- and NK-cell neoplasms — PTCL-NOS, AITL, ALCL, cutaneous T-cell lymphoma (mycosis fungoides, Sézary), NK/T-cell, HSTCL, ATL.',
+  MYELOID_NEOPLASM: 'Myeloid neoplasms — AML, MDS, MDS/MPN overlap, MPN (PV, ET, MF), CMML, CML.',
+  PRECURSOR_LYMPHOID: 'B-cell or T-cell acute lymphoblastic leukemia / lymphoma.',
+  PLASMA_CELL: 'Plasma cell neoplasms such as multiple myeloma, plasma cell leukemia, plasmacytoma, AL amyloidosis, Waldenström, POEMS.',
+  OTHER: 'Basket catch-all for cancer types not covered by a named block.',
+};
+
 // ──────────────────────────────────────────────────────────────────────────
 // Field classification (informational only — drives the per-class breakdown
 // on the reviewer's scores page; not used as a pass-gate threshold).
@@ -88,6 +119,9 @@ export interface FieldDef {
   kind: FieldKind;
   label: string;
   options?: string[];   // for multi
+  // Per-option hover-tooltip definitions (multi only). Surfaced when a
+  // labeler hovers an option chip. Missing keys simply skip the tooltip.
+  optionHelp?: Record<string, string>;
   helpText?: string;    // tooltip / annotation-guide hint
   class: FieldClass;
   // Two-key compound widget: priorTherapyRequired <-> priorTherapyExcluded.

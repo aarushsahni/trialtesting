@@ -3,9 +3,11 @@ import { notFound, redirect } from 'next/navigation';
 import { readSession } from '@/lib/auth';
 import { query, AnnotationRow, ReferenceKeyRow, TrialAssignmentRow, TrialRow } from '@/lib/db';
 import { AppHeader } from '@/components/AppHeader';
+import { Tooltip } from '@/components/Tooltip';
 import { BLOCKS } from '@/lib/schema/field-schemas';
 import {
-  ALL_CANCER_TYPES, CancerType, Cohort, FieldDef, FieldValue, TrialAnswers,
+  ALL_CANCER_TYPES, CANCER_TYPE_DEFINITIONS, CancerType, Cohort, FieldDef,
+  FieldValue, TrialAnswers,
 } from '@/lib/types';
 import { applyCohortMap } from '@/lib/scoring';
 import { MarkReviewedButton } from '../MarkReviewedButton';
@@ -14,7 +16,7 @@ import { CohortMappingPanel } from './CohortMappingPanel';
 export const dynamic = 'force-dynamic';
 
 const TRIAL_LEVEL_DEFS: Record<string, FieldDef> = {
-  cancerTypes: { kind: 'multi', label: 'Cancer types', options: ALL_CANCER_TYPES, class: 'other' },
+  cancerTypes: { kind: 'multi', label: 'Cancer types', options: ALL_CANCER_TYPES, optionHelp: CANCER_TYPE_DEFINITIONS, class: 'other' },
   minAge:      { kind: 'number', label: 'Min age',  class: 'other' },
   maxAge:      { kind: 'number', label: 'Max age',  class: 'other' },
   ecogMin:     { kind: 'number', label: 'ECOG min', class: 'other' },
@@ -97,6 +99,7 @@ export default async function TestAnnotationDiff({
     cancerType: CancerType | null;
     fieldKey: string;
     label: string;
+    optionHelp?: Record<string, string>;
     ref: FieldValue;
     att: FieldValue;
     agree: boolean;
@@ -108,7 +111,7 @@ export default async function TestAnnotationDiff({
     const att = getProp(attTa, fk);
     rows.push({
       scope: 'trial', cohortKey: null, cancerType: null, fieldKey: fk,
-      label: def.label, ref, att, agree: norm(ref) === norm(att),
+      label: def.label, optionHelp: def.optionHelp, ref, att, agree: norm(ref) === norm(att),
     });
   }
 
@@ -150,7 +153,7 @@ export default async function TestAnnotationDiff({
         const att = (attBlock[fk] ?? null) as FieldValue;
         rows.push({
           scope: 'descriptor', cohortKey, cohortDisplayName: displayName,
-          cancerType: ct, fieldKey: fk, label: def.label,
+          cancerType: ct, fieldKey: fk, label: def.label, optionHelp: def.optionHelp,
           ref, att, agree: norm(ref) === norm(att),
         });
       }
@@ -244,16 +247,18 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function ValueChip({ value }: { value: FieldValue }) {
+function ValueChip({ value, optionHelp }: { value: FieldValue; optionHelp?: Record<string, string> }) {
   if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) {
     return <span className="text-slate-400 italic">null</span>;
   }
   if (Array.isArray(value)) {
     return (
       <span className="flex flex-wrap gap-1">
-        {value.map((v) => (
-          <span key={v} className="text-[11px] px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded font-medium">{v}</span>
-        ))}
+        {value.map((v) => {
+          const chip = <span className="text-[11px] px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded font-medium">{v}</span>;
+          const help = optionHelp?.[v];
+          return help ? <Tooltip key={v} text={help}>{chip}</Tooltip> : <span key={v}>{chip}</span>;
+        })}
       </span>
     );
   }
@@ -263,7 +268,7 @@ function ValueChip({ value }: { value: FieldValue }) {
   return <span className="font-semibold text-slate-900">{String(value)}</span>;
 }
 
-function DiffRow({ r }: { r: { scope: string; cohortKey: string | null; cohortDisplayName?: string; cancerType: CancerType | null; fieldKey: string; label: string; ref: FieldValue; att: FieldValue; agree: boolean } }) {
+function DiffRow({ r }: { r: { scope: string; cohortKey: string | null; cohortDisplayName?: string; cancerType: CancerType | null; fieldKey: string; label: string; optionHelp?: Record<string, string>; ref: FieldValue; att: FieldValue; agree: boolean } }) {
   const scopeLabel = r.scope === 'trial' ? 'trial'
     : r.scope === 'cohort' ? `${r.cohortKey} cohort`
     : r.scope === 'cohort_existence' ? `${r.cohortKey} exists?`
@@ -274,8 +279,8 @@ function DiffRow({ r }: { r: { scope: string; cohortKey: string | null; cohortDi
         <span className="font-medium text-slate-800">{r.label}</span>
         <span className="text-xs text-slate-400 ml-2 font-mono">{scopeLabel} · {r.fieldKey}</span>
       </div>
-      <div className="text-xs"><span className="text-slate-500 mr-1">Ref:</span><ValueChip value={r.ref} /></div>
-      <div className="text-xs"><span className="text-slate-500 mr-1">Expert:</span><ValueChip value={r.att} /></div>
+      <div className="text-xs"><span className="text-slate-500 mr-1">Ref:</span><ValueChip value={r.ref} optionHelp={r.optionHelp} /></div>
+      <div className="text-xs"><span className="text-slate-500 mr-1">Expert:</span><ValueChip value={r.att} optionHelp={r.optionHelp} /></div>
     </div>
   );
 }

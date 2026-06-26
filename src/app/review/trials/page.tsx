@@ -39,10 +39,7 @@ export default async function TrialsCatalog() {
     FROM trials t
     LEFT JOIN reference_keys rk ON rk.nct_id = t.nct_id
     LEFT JOIN users u ON u.id = rk.built_by_reviewer_id
-    WHERE EXISTS (
-      SELECT 1 FROM trial_assignments ta
-      WHERE ta.nct_id = t.nct_id AND ta.is_test_trial = TRUE
-    )
+    WHERE t.is_test_trial = TRUE
     ORDER BY t.position, t.nct_id
   `);
 

@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import {
-  ALL_CANCER_TYPES, BlockAnswers, CancerType, CANCER_TYPE_LABELS, Cohort,
-  FieldDef, FieldValue,
+  ALL_CANCER_TYPES, BlockAnswers, CancerType, CANCER_TYPE_DEFINITIONS,
+  CANCER_TYPE_LABELS, Cohort, FieldDef, FieldValue,
 } from '@/lib/types';
 import { BlockSection } from './BlockSection';
 import { FieldEditor } from './FieldEditor';
+import { Tooltip } from './Tooltip';
 import { HelpTextMap } from '@/lib/guide-parser';
 
 interface Props {
@@ -55,8 +56,15 @@ export function CohortCard({
   };
 
   const setDescriptor = (ct: CancerType, fieldKey: string, v: FieldValue) => {
-    const block: BlockAnswers = { ...(cohort.applicableCancerTypes[ct] ?? {}) };
-    block[fieldKey] = v;
+    setDescriptors(ct, { [fieldKey]: v });
+  };
+
+  // Multi-field updater. Needed for compound widgets (e.g., PriorTherapyPair)
+  // that write two fields per click — two sequential setDescriptor calls
+  // would both read the same stale `cohort` prop and the second would
+  // clobber the first.
+  const setDescriptors = (ct: CancerType, updates: Record<string, FieldValue>) => {
+    const block: BlockAnswers = { ...(cohort.applicableCancerTypes[ct] ?? {}), ...updates };
     onChange({
       ...cohort,
       applicableCancerTypes: { ...cohort.applicableCancerTypes, [ct]: block },
@@ -126,9 +134,9 @@ export function CohortCard({
           <div className="flex flex-wrap gap-1.5">
             {ALL_CANCER_TYPES.map((ct) => {
               const on = ct in cohort.applicableCancerTypes;
-              return (
+              const def = CANCER_TYPE_DEFINITIONS[ct];
+              const btn = (
                 <button
-                  key={ct}
                   type="button"
                   disabled={disabled}
                   onClick={() => setApplicable(ct, !on)}
@@ -142,6 +150,9 @@ export function CohortCard({
                   {CANCER_TYPE_LABELS[ct]}
                 </button>
               );
+              return def
+                ? <Tooltip key={ct} text={def}>{btn}</Tooltip>
+                : <span key={ct}>{btn}</span>;
             })}
           </div>
           {selectedCts.length === 0 && (
@@ -185,6 +196,7 @@ export function CohortCard({
               cancerType={ct}
               answers={cohort.applicableCancerTypes[ct] ?? {}}
               onFieldChange={(fieldKey, v) => setDescriptor(ct, fieldKey, v)}
+              onFieldsChange={(updates) => setDescriptors(ct, updates)}
               disabled={disabled}
               helpTextByField={helpTextMap[ct]}
             />

@@ -30,9 +30,20 @@ async function main() {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL UNIQUE,
       role TEXT NOT NULL CHECK (role IN ('reviewer', 'expert')),
-      dob_hash TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+  // Existing DBs: rename dob_hash → password_hash. The existing bcrypt hashes
+  // still validate against the user's old DOB string until they change it.
+  await pool.query(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='dob_hash')
+         AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='password_hash')
+      THEN
+        ALTER TABLE users RENAME COLUMN dob_hash TO password_hash;
+      END IF;
+    END $$;
   `);
 
   await pool.query(`
@@ -63,12 +74,23 @@ async function main() {
       assigned_cancer_types TEXT[] NOT NULL,
       schema_version_id UUID REFERENCES schema_versions(id),
       position INT NOT NULL DEFAULT 0,
+      is_test_trial BOOLEAN NOT NULL DEFAULT FALSE,
       fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS trials_position_idx ON trials(position, nct_id)`);
   // Drop the legacy ai_answers column on existing DBs.
   await pool.query(`ALTER TABLE trials DROP COLUMN IF EXISTS ai_answers`);
+  // Add is_test_trial to existing DBs and backfill from prior assignment flags.
+  await pool.query(`ALTER TABLE trials ADD COLUMN IF NOT EXISTS is_test_trial BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`
+    UPDATE trials t SET is_test_trial = TRUE
+     WHERE NOT t.is_test_trial
+       AND EXISTS (
+         SELECT 1 FROM trial_assignments a
+          WHERE a.nct_id = t.nct_id AND a.is_test_trial = TRUE
+       )
+  `);
 
   // Per-expert pool. Test trials are the gate that locks the rest.
   // test_reviewed_at flips when the reviewer marks the expert's submission

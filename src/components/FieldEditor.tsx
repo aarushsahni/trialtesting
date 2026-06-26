@@ -30,6 +30,7 @@ export function FieldEditor({ def, value, onChange, disabled, helpTextOverride }
       {def.kind === 'multi' && (
         <MultiInput
           options={def.options!}
+          optionHelp={def.optionHelp}
           value={Array.isArray(value) ? value : []}
           onChange={(v) => onChange(v.length === 0 ? null : v)}
           disabled={disabled}
@@ -54,8 +55,8 @@ export function FieldEditor({ def, value, onChange, disabled, helpTextOverride }
 }
 
 function MultiInput({
-  options, value, onChange, disabled,
-}: { options: string[]; value: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
+  options, optionHelp, value, onChange, disabled,
+}: { options: string[]; optionHelp?: Record<string, string>; value: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
   const toggle = (o: string) => {
     if (disabled) return;
     onChange(value.includes(o) ? value.filter((x) => x !== o) : [...value, o]);
@@ -64,9 +65,9 @@ function MultiInput({
     <div className="flex flex-wrap gap-1.5">
       {options.map((o) => {
         const on = value.includes(o);
-        return (
+        const help = optionHelp?.[o];
+        const btn = (
           <button
-            key={o}
             type="button"
             disabled={disabled}
             onClick={() => toggle(o)}
@@ -80,6 +81,9 @@ function MultiInput({
             {o}
           </button>
         );
+        return help
+          ? <Tooltip key={o} text={help}>{btn}</Tooltip>
+          : <span key={o}>{btn}</span>;
       })}
     </div>
   );

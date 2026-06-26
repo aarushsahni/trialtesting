@@ -56,7 +56,7 @@ export interface UserRow {
   id: string;
   name: string;
   role: UserRole;
-  dob_hash: string;
+  password_hash: string;
   created_at: string;
 }
 

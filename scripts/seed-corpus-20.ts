@@ -15,13 +15,13 @@ import { snapshotSchema } from '../src/lib/schema/field-schemas';
 import { fetchStudy, studyToInsertValues } from '../src/lib/ctgov';
 
 const SCHEMA_VERSION_TAG = process.env.SCHEMA_VERSION_TAG || 'v2.0';
-const TEST_DOB = '01/01/1990';
+const TEST_PASSWORD = 'testpass';
 
 // 20 trials. First 2 are the test trials. Each row carries its CancerType
 // mapping for the schema's per-cancer-type descriptor blocks.
 const TRIALS: { nctId: string; cancerType: CancerType }[] = [
-  { nctId: 'NCT04026412', cancerType: 'LUNG' },              // Test #1 — Nivolumab+CCRT NSCLC PHASE3
-  { nctId: 'NCT02206984', cancerType: 'BREAST' },            // Test #2 — Endocrine response invasive lobular PHASE2
+  { nctId: 'NCT03511664', cancerType: 'PROSTATE' },          // Test #1 (solid)  — VISION: Lu-177 PSMA-617 in mCRPC PHASE3
+  { nctId: 'NCT03391466', cancerType: 'MATURE_B_CELL' },     // Test #2 (liquid) — ZUMA-7: axi-cel vs SOC in 2L R/R LBCL PHASE3
   { nctId: 'NCT01725633', cancerType: 'BREAST' },
   { nctId: 'NCT02933255', cancerType: 'PROSTATE' },
   { nctId: 'NCT01859221', cancerType: 'PROSTATE' },
@@ -109,27 +109,28 @@ async function main() {
     // Insert trials, preserving the order in TRIALS via `position`.
     for (let i = 0; i < studies.length; i++) {
       const { values: v } = studies[i];
+      const isTest = i < TEST_TRIAL_COUNT;
       await client.query(
         `INSERT INTO trials (
           nct_id, brief_title, brief_summary, detailed_description,
           eligibility_raw, conditions, interventions,
           ctgov_sex, ctgov_min_age, ctgov_max_age,
           overall_status, study_type, phases, assigned_cancer_types,
-          schema_version_id, position
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          schema_version_id, position, is_test_trial
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
         [
           v.nctId, v.briefTitle, v.briefSummary, v.detailedDescription,
           v.eligibilityRaw, v.conditions, v.interventions,
           v.ctgovSex, v.ctgovMinAge, v.ctgovMaxAge,
           v.overallStatus, v.studyType, v.phases, v.assignedCancerTypes,
-          schemaVersionId, i,
+          schemaVersionId, i, isTest,
         ],
       );
     }
     console.log(`Inserted ${studies.length} trials.`);
 
     // Create / reuse test experts.
-    const dobHash = await bcrypt.hash(TEST_DOB, 10);
+    const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);
     const expertIds: { name: string; id: string }[] = [];
     for (const name of TEST_EXPERT_NAMES) {
       const existing = await client.query<{ id: string }>(
@@ -141,11 +142,11 @@ async function main() {
         console.log(`  reused ${name}`);
       } else {
         const inserted = await client.query<{ id: string }>(
-          `INSERT INTO users (name, role, dob_hash) VALUES ($1, 'expert', $2) RETURNING id`,
-          [name, dobHash],
+          `INSERT INTO users (name, role, password_hash) VALUES ($1, 'expert', $2) RETURNING id`,
+          [name, passwordHash],
         );
         expertIds.push({ name, id: inserted.rows[0].id });
-        console.log(`  created ${name}  (DOB ${TEST_DOB})`);
+        console.log(`  created ${name}  (password ${TEST_PASSWORD})`);
       }
     }
 
@@ -208,7 +209,7 @@ async function main() {
   for (const s of studies.slice(0, TEST_TRIAL_COUNT)) {
     console.log(`  ${s.values.nctId}  [${s.cancerType}]  ${s.values.briefTitle.slice(0, 80)}`);
   }
-  console.log('\nTest experts (DOB 01/01/1990):');
+  console.log(`\nTest experts (password ${TEST_PASSWORD}):`);
   for (const name of TEST_EXPERT_NAMES) console.log(`  ${name}`);
 
   await pool.end();

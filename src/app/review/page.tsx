@@ -22,17 +22,13 @@ export default async function ReviewHub() {
 
   const rows = await query<Stats>(`
     SELECT
-      (SELECT COUNT(DISTINCT nct_id) FROM trial_assignments WHERE is_test_trial = TRUE)::int AS trial_count,
+      (SELECT COUNT(*) FROM trials WHERE is_test_trial = TRUE)::int AS trial_count,
       (SELECT COUNT(*) FROM reference_keys rk
-         WHERE EXISTS (
-           SELECT 1 FROM trial_assignments ta
-           WHERE ta.nct_id = rk.nct_id AND ta.is_test_trial = TRUE
-         ))::int AS refkeys_total,
+         JOIN trials t ON t.nct_id = rk.nct_id
+         WHERE t.is_test_trial = TRUE)::int AS refkeys_total,
       (SELECT COUNT(*) FROM reference_keys rk
-         WHERE complete = TRUE AND EXISTS (
-           SELECT 1 FROM trial_assignments ta
-           WHERE ta.nct_id = rk.nct_id AND ta.is_test_trial = TRUE
-         ))::int AS refkeys_complete,
+         JOIN trials t ON t.nct_id = rk.nct_id
+         WHERE rk.complete = TRUE AND t.is_test_trial = TRUE)::int AS refkeys_complete,
       (SELECT COUNT(*) FROM users WHERE role = 'expert')::int AS expert_count,
       (SELECT COUNT(*) FROM annotations a
          JOIN trial_assignments ta ON ta.expert_id = a.expert_id AND ta.nct_id = a.nct_id

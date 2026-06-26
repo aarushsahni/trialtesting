@@ -11,10 +11,11 @@ import Link from 'next/link';
 import { adjudicateFieldAction, clearAdjudicationAction } from '@/app/actions/adjudication';
 import { EligibilityText } from '@/components/EligibilityText';
 import { FieldEditor } from '@/components/FieldEditor';
+import { Tooltip } from '@/components/Tooltip';
 import { BLOCKS } from '@/lib/schema/field-schemas';
 import {
-  ALL_CANCER_TYPES, CancerType, Cohort, FieldDef, FieldValue,
-  TRIAL_LEVEL_SENTINEL, TrialAnswers,
+  ALL_CANCER_TYPES, CANCER_TYPE_DEFINITIONS, CancerType, Cohort, FieldDef,
+  FieldValue, TRIAL_LEVEL_SENTINEL, TrialAnswers,
 } from '@/lib/types';
 
 interface ReviewSummary {
@@ -40,7 +41,7 @@ interface Props {
 }
 
 const TRIAL_LEVEL_DEFS: Record<string, FieldDef> = {
-  cancerTypes: { kind: 'multi', label: 'Cancer types', options: ALL_CANCER_TYPES, class: 'other' },
+  cancerTypes: { kind: 'multi', label: 'Cancer types', options: ALL_CANCER_TYPES, optionHelp: CANCER_TYPE_DEFINITIONS, class: 'other' },
   minAge:      { kind: 'number', label: 'Min age',  class: 'other' },
   maxAge:      { kind: 'number', label: 'Max age',  class: 'other' },
   ecogMin:     { kind: 'number', label: 'ECOG min', class: 'other' },
@@ -85,16 +86,18 @@ function getDescriptor(c: Cohort | undefined, ct: CancerType, fieldKey: string):
   return v === undefined ? null : v;
 }
 
-function ValueChip({ value }: { value: FieldValue }) {
+function ValueChip({ value, optionHelp }: { value: FieldValue; optionHelp?: Record<string, string> }) {
   if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) {
     return <span className="text-slate-400 italic">null</span>;
   }
   if (Array.isArray(value)) {
     return (
       <span className="flex flex-wrap gap-1">
-        {value.map((v) => (
-          <span key={v} className="text-[11px] px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded font-medium">{v}</span>
-        ))}
+        {value.map((v) => {
+          const chip = <span className="text-[11px] px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded font-medium">{v}</span>;
+          const help = optionHelp?.[v];
+          return help ? <Tooltip key={v} text={help}>{chip}</Tooltip> : <span key={v}>{chip}</span>;
+        })}
       </span>
     );
   }
@@ -364,8 +367,8 @@ export function AdjudicationView({
                       <span className="font-medium text-slate-800">{row.def.label}</span>
                       <span className="text-xs text-slate-400 ml-2 font-mono">{scopeLabel} · {row.fieldKey}</span>
                     </div>
-                    {reviews[0] && <div className="text-xs text-slate-500">{reviews[0].expertName.split(' ')[0]}: <ValueChip value={row.a} /></div>}
-                    {reviews[1] && <div className="text-xs text-slate-500">{reviews[1].expertName.split(' ')[0]}: <ValueChip value={row.b} /></div>}
+                    {reviews[0] && <div className="text-xs text-slate-500">{reviews[0].expertName.split(' ')[0]}: <ValueChip value={row.a} optionHelp={row.def.optionHelp} /></div>}
+                    {reviews[1] && <div className="text-xs text-slate-500">{reviews[1].expertName.split(' ')[0]}: <ValueChip value={row.b} optionHelp={row.def.optionHelp} /></div>}
                   </div>
                 );
               })}
@@ -410,14 +413,14 @@ function DisagreementCard({
       </div>
 
       <div className="grid grid-cols-2 gap-3 mb-3">
-        <PickCard label={expertNames[0]} value={row.a} onPick={() => onPick(row.a)} />
-        <PickCard label={expertNames[1]} value={row.b} onPick={() => onPick(row.b)} />
+        <PickCard label={expertNames[0]} value={row.a} optionHelp={row.def.optionHelp} onPick={() => onPick(row.a)} />
+        <PickCard label={expertNames[1]} value={row.b} optionHelp={row.def.optionHelp} onPick={() => onPick(row.b)} />
       </div>
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="text-sm">
           <span className="text-xs text-slate-500 mr-2">Final value:</span>
-          {isAdjudicated ? <ValueChip value={finalValue as FieldValue} /> : <span className="text-slate-400 italic">not set</span>}
+          {isAdjudicated ? <ValueChip value={finalValue as FieldValue} optionHelp={row.def.optionHelp} /> : <span className="text-slate-400 italic">not set</span>}
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -455,11 +458,11 @@ function DisagreementCard({
   );
 }
 
-function PickCard({ label, value, onPick }: { label: string; value: FieldValue; onPick: () => void }) {
+function PickCard({ label, value, optionHelp, onPick }: { label: string; value: FieldValue; optionHelp?: Record<string, string>; onPick: () => void }) {
   return (
     <div className="border border-slate-200 rounded-xl p-3 bg-white">
       <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1.5 truncate">{label}</div>
-      <div className="text-sm mb-2 min-h-[20px]"><ValueChip value={value} /></div>
+      <div className="text-sm mb-2 min-h-[20px]"><ValueChip value={value} optionHelp={optionHelp} /></div>
       <button
         onClick={onPick}
         className="text-xs px-2.5 py-1 border border-slate-300 rounded-lg text-slate-700 hover:border-blue-400 hover:text-blue-700 transition"
