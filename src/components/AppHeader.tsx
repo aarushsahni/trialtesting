@@ -16,15 +16,12 @@ export function AppHeader({ name, role }: Props) {
           className="flex items-center gap-3 group"
           title="Back to dashboard"
         >
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-sm group-hover:shadow-md group-hover:shadow-blue-200 transition">
-            Q
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-[10px] group-hover:shadow-md group-hover:shadow-blue-200 transition">
+            TM
           </div>
           <div>
             <div className="text-sm font-semibold text-slate-900 leading-tight group-hover:text-blue-700 transition">
-              Trial Annotation
-            </div>
-            <div className="text-xs text-slate-500 leading-tight">
-              {name} · <span className="capitalize">{role}</span>
+              TEMPO Trial Annotation Platform
             </div>
           </div>
         </Link>
