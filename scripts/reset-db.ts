@@ -11,11 +11,21 @@ config();
 import { Pool } from 'pg';
 import { spawn } from 'node:child_process';
 
+// Drop order is FK-safe given CASCADE: leaves go first, roots last.
 const TABLES = [
+  // legacy tables — kept here so reset-db continues to clean up old DBs
+  'corpus_adjudications',
+  'corpus_reviews',
+  'corpus_trials',
   'qualification_attempts',
-  'reference_keys',
   'qualification_sets',
   'qualification_trials',
+  // current schema
+  'trial_adjudications',
+  'annotations',
+  'reference_keys',
+  'trial_assignments',
+  'trials',
   'annotation_guide',
   'schema_versions',
   'users',

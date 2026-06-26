@@ -32,6 +32,18 @@ These rules apply to **every** field unless a field-specific note overrides them
 
 ---
 
+## Cohorts and trial-level fields
+
+Each trial is annotated as a top-level object plus one or more **cohorts**. Trial-level fields describe what applies across the entire trial: the cancer type(s) the trial enrolls, the age range, and the ECOG range. Set these from the most general eligibility statements in the protocol (the "all patients" criteria).
+
+A cohort is a subgroup within the trial with its own descriptor values. Single-cancer trials usually have one cohort named `MAIN`. Basket and biomarker-stratified trials have multiple cohorts — one per arm. Each cohort lists which cancer types it accepts (`applicableCancerTypes`); for each accepted cancer type the labeler fills the per-cancer descriptor fields. A cohort can also override age and ECOG with cohort-specific tighter bounds. Cohort keys (`MAIN`, `BIOMARKER_POS`, `PEDIATRIC`, …) are UPPERCASE identifiers — pick a short canonical key per cohort; the display name is the human-readable label.
+
+When the reviewer builds the reference key for a trial, they decide the canonical cohort breakdown. Experts attempting that trial see those cohorts seeded with blank descriptor values — they fill them in. Experts can also add cohorts if they believe the reviewer missed one. Scoring compares cohorts by their `cohortKey` strings: a cohort in the reference but not in the expert (or vice versa) contributes false negatives / false positives field-by-field, exactly as a missed block did under the old schema.
+
+Use `OTHER` in `applicableCancerTypes` only for true basket catch-all cohorts that accept cancer types outside the 24 named blocks; `OTHER` carries no descriptor fields and contributes nothing to field-level scoring.
+
+---
+
 ## Field-type quick reference
 
 | Type in schema | How to record | `null` when |
@@ -164,8 +176,8 @@ Schema key: `breast` &nbsp;|&nbsp; Block: `"breast"`
 | `pi3kAktPathwayStatus` | multi-select: `ALTERED`, `WILD_TYPE` | PIK3CA / AKT1 / PTEN pathway alteration (capivasertib eligibility) | List every value the trial accepts; `null` if unrestricted. |
 | `esr1Status` | multi-select: `MUTATED`, `WILD_TYPE` | ESR1 ligand-binding-domain mutation (elacestrant eligibility) | List every value the trial accepts; `null` if unrestricted. |
 | `pdl1Status` | multi-select: `POSITIVE`, `NEGATIVE` | PD-L1 expression status (typically IC for TNBC) | List every value the trial accepts; `null` if unrestricted. |
-| `priorTherapyRequired` | multi-select: `ENDOCRINE_THERAPY`, `CDK46_INHIBITOR`, `CHEMOTHERAPY_ADVANCED`, `HER2_DIRECTED_THERAPY`, `ANTIBODY_DRUG_CONJUGATE` | Therapies trial requires patient to have received | List every value the trial accepts; `null` if unrestricted. |
-| `priorTherapyExcluded` | multi-select: `ENDOCRINE_THERAPY`, `CDK46_INHIBITOR`, `CHEMOTHERAPY_ADVANCED`, `HER2_DIRECTED_THERAPY`, `ANTIBODY_DRUG_CONJUGATE` | Therapies trial excludes prior exposure to | List every value the trial accepts; `null` if unrestricted. |
+| `priorTherapyRequired` | multi-select: `ENDOCRINE_THERAPY`, `CDK46_INHIBITOR`, `HER2_DIRECTED_THERAPY`, `ANTIBODY_DRUG_CONJUGATE`, `TAXANE`, `ANTHRACYCLINE`, `PLATINUM`, `CYCLOPHOSPHAMIDE` | Therapies trial requires patient to have received | List every value the trial accepts; `null` if unrestricted. |
+| `priorTherapyExcluded` | multi-select: `ENDOCRINE_THERAPY`, `CDK46_INHIBITOR`, `HER2_DIRECTED_THERAPY`, `ANTIBODY_DRUG_CONJUGATE`, `TAXANE`, `ANTHRACYCLINE`, `PLATINUM`, `CYCLOPHOSPHAMIDE` | Therapies trial excludes prior exposure to | List every value the trial accepts; `null` if unrestricted. |
 | `minPriorSystemicLines` | number | Minimum prior lines of systemic therapy | Record the trial's stated numeric threshold; `null` if none stated. |
 | `maxPriorSystemicLines` | number | Maximum prior lines of systemic therapy allowed | Record the trial's stated numeric threshold; `null` if none stated. |
 
@@ -483,7 +495,7 @@ Schema key: `cns` &nbsp;|&nbsp; Block: `"cns"`
 
 | Field | Type | What it captures | How to annotate from the CT.gov record |
 |---|---|---|---|
-| `histology` | multi-select: `GLIOBLASTOMA`, `ASTROCYTOMA`, `OLIGODENDROGLIOMA`, `EPENDYMOMA`, `MEDULLOBLASTOMA`, `MENINGIOMA`, `PRIMARY_CNS_LYMPHOMA`, `OTHER` | WHO CNS tumor histology | List every value the trial accepts; `null` if unrestricted. |
+| `histology` | multi-select: `GLIOBLASTOMA`, `ASTROCYTOMA`, `OLIGODENDROGLIOMA`, `EPENDYMOMA`, `MEDULLOBLASTOMA`, `MENINGIOMA`, `OTHER` | WHO CNS tumor histology | List every value the trial accepts; `null` if unrestricted. |
 | `whoGrade` | multi-select: `1`, `2`, `3`, `4` | WHO CNS grade | List every value the trial accepts; `null` if unrestricted. |
 | `diseaseStatus` | multi-select: `NEWLY_DIAGNOSED`, `RECURRENT_PROGRESSIVE` | Newly diagnosed vs recurrent/progressive after first-line | List every value the trial accepts; `null` if unrestricted. |
 | `idhStatus` | multi-select: `MUTANT`, `WILD_TYPE` | IDH1/2 mutation status (defining for adult diffuse gliomas) | List every value the trial accepts; `null` if unrestricted. |
@@ -509,7 +521,6 @@ Schema key: `cns` &nbsp;|&nbsp; Block: `"cns"`
 - `diseaseStatus`: newly diagnosed (pre- or peri-chemoradiation) vs recurrent/progressive after first-line are distinct trial populations; do not conflate.
 - `measurableDiseaseRano`: CNS trials use RANO, not RECIST. `true` only if measurable disease per RANO is required (note some GBM trials enroll non-measurable post-resection disease).
 - `resectionExtent`: gross-total vs subtotal vs biopsy-only is a real eligibility gate in some trials; record per the operative criterion.
-- Primary CNS lymphoma is included in the `histology` enum but is biologically a lymphoma; if a trial is clearly a PCNSL lymphoma-directed trial it may also map to `mature_b_cell` — annotate both applicable blocks.
 
 ---
 
@@ -716,7 +727,7 @@ Schema key: `plasma_cell` &nbsp;|&nbsp; Block: `"plasmaCell"`
 | `acceptedDiseases` | multi-select: `MM`, `PCL`, `PLASMACYTOMA`, `AL_AMYLOIDOSIS`, `WALDENSTROM_LPL`, `POEMS`, `OTHER` | Disease subtypes the trial enrolls within this lineage | List every value the trial accepts; `null` if unrestricted. |
 | `rissStage` | multi-select: `I`, `II`, `III` | R-ISS stage (multiple myeloma) | List every value the trial accepts; `null` if unrestricted. |
 | `highRiskCytogenetics` | boolean | High-risk FISH cytogenetics (del 17p, t(4;14), t(14;16), gain 1q) | `true` = trial requires present; `false` = explicit exclusion; `null` = unmentioned. |
-| `measurableDiseaseImwg` | boolean | Measurable disease per IMWG criteria | `true` = trial requires present; `false` = explicit exclusion; `null` = unmentioned. |
+| `measurableDiseaseImwg` | boolean | Measurable disease per IMWG criteria — any one of: serum M-protein ≥1 g/dL; urine M-protein ≥200 mg/24h; or serum free light chain (FLC) ≥10 mg/dL with an abnormal κ/λ ratio (difference between involved and uninvolved FLC levels also ≥10 mg/dL). | `true` = trial requires present; `false` = explicit exclusion; `null` = unmentioned. |
 | `extramedullaryDisease` | boolean | Extramedullary disease present | `true` = trial requires present; `false` = explicit exclusion; `null` = unmentioned. |
 | `cnsInvolvement` | boolean | CNS involvement by the underlying hematologic malignancy | `true` = trial requires present; `false` = explicit exclusion; `null` = unmentioned. |
 | `amyloidCardiacInvolvement` | boolean | Cardiac involvement in AL amyloidosis | `true` = trial requires present; `false` = explicit exclusion; `null` = unmentioned. |

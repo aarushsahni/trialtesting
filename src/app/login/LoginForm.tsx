@@ -2,7 +2,6 @@
 
 import { useActionState } from 'react';
 import { loginAction, ActionResult } from '../actions/auth';
-import { DobInput } from '@/components/DobInput';
 
 const initial: ActionResult = { ok: true };
 
@@ -38,10 +37,17 @@ export default function LoginForm({ names }: { names: string[] }) {
       </div>
 
       <div>
-        <label htmlFor="dob" className="text-xs uppercase tracking-wider text-slate-500 font-semibold block mb-2">
-          Date of birth <span className="text-slate-400 normal-case font-normal">(MM/DD/YYYY)</span>
+        <label htmlFor="password" className="text-xs uppercase tracking-wider text-slate-500 font-semibold block mb-2">
+          Password
         </label>
-        <DobInput id="dob" name="dob" required />
+        <input
+          id="password"
+          name="password"
+          type="password"
+          required
+          autoComplete="current-password"
+          className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
       </div>
 
       {state && !state.ok && state.error && (

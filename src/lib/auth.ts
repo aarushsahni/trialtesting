@@ -1,4 +1,4 @@
-// Lightweight auth: name + DOB (mm/dd/yyyy) as password.
+// Lightweight auth: name + password.
 // Session stored in HTTP-only signed JWT cookie via `jose`.
 
 import { cookies } from 'next/headers';
@@ -19,27 +19,26 @@ const SESSION_KEY = new TextEncoder().encode(
 function secret(): Uint8Array { return SESSION_KEY; }
 
 // ──────────────────────────────────────────────────────────────────────────
-// DOB normalization + hashing
+// Password helpers
 // ──────────────────────────────────────────────────────────────────────────
 
-/** Normalize "M/D/YYYY" or "MM/DD/YYYY" -> canonical "MM/DD/YYYY". */
-export function normalizeDob(input: string): string | null {
-  const m = input.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!m) return null;
-  const mm = m[1].padStart(2, '0');
-  const dd = m[2].padStart(2, '0');
-  const yyyy = m[3];
-  if (Number(mm) < 1 || Number(mm) > 12) return null;
-  if (Number(dd) < 1 || Number(dd) > 31) return null;
-  return `${mm}/${dd}/${yyyy}`;
+export const MIN_PASSWORD_LENGTH = 8;
+
+/** Returns an error message if the password is unacceptable, else null. */
+export function validatePassword(input: string): string | null {
+  if (!input) return 'Password is required.';
+  if (input.length < MIN_PASSWORD_LENGTH) {
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+  }
+  return null;
 }
 
-export async function hashDob(dob: string): Promise<string> {
-  return bcrypt.hash(dob, 10);
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 10);
 }
 
-export async function compareDob(dob: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(dob, hash);
+export async function comparePassword(password: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(password, hash);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -140,14 +139,28 @@ export async function listUsers(role?: UserRole): Promise<UserRow[]> {
 export async function createUser(opts: {
   name: string;
   role: UserRole;
-  dob: string;
+  password: string;
 }): Promise<UserRow> {
-  const dobHash = await hashDob(opts.dob);
+  const passwordHash = await hashPassword(opts.password);
   const rows = await query<UserRow>(
-    `INSERT INTO users (name, role, dob_hash) VALUES ($1, $2, $3) RETURNING *`,
-    [opts.name, opts.role, dobHash],
+    `INSERT INTO users (name, role, password_hash) VALUES ($1, $2, $3) RETURNING *`,
+    [opts.name, opts.role, passwordHash],
   );
   return rows[0];
+}
+
+// Insert an is_test_trial=TRUE assignment for the expert against every trial
+// flagged as a test trial. Called from the signup flow so new experts see the
+// test trials on their dashboard immediately. Idempotent.
+export async function assignTestTrialsToExpert(expertId: string): Promise<void> {
+  await query(
+    `INSERT INTO trial_assignments (expert_id, nct_id, is_test_trial)
+     SELECT $1, t.nct_id, TRUE
+       FROM trials t
+      WHERE t.is_test_trial = TRUE
+     ON CONFLICT (expert_id, nct_id) DO NOTHING`,
+    [expertId],
+  );
 }
 
 export async function updateUserName(userId: string, name: string): Promise<UserRow | null> {
@@ -158,9 +171,9 @@ export async function updateUserName(userId: string, name: string): Promise<User
   return rows[0] ?? null;
 }
 
-export async function updateUserDob(userId: string, dob: string): Promise<void> {
-  const hash = await hashDob(dob);
-  await query(`UPDATE users SET dob_hash = $1 WHERE id = $2`, [hash, userId]);
+export async function updateUserPassword(userId: string, password: string): Promise<void> {
+  const hash = await hashPassword(password);
+  await query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hash, userId]);
 }
 
 export async function getUserById(userId: string): Promise<UserRow | null> {

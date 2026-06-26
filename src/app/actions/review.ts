@@ -4,15 +4,33 @@ import { requireSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { TrialAnswers } from '@/lib/types';
 import { saveGuide } from '@/lib/guide-store';
+import { scoreAnnotation } from '@/lib/scoring';
 
 export interface ActionResult {
   ok: boolean;
   error?: string;
 }
 
-// Save (upsert) a reference key for a single trial. Set must not be locked.
+// Ensure the trial exists and pull its schema_version_id (falling back to the
+// most recent schema version if the trial row hasn't been stamped yet).
+async function trialSchemaVersionId(nctId: string): Promise<string | null> {
+  const rows = await query<{ schema_version_id: string | null }>(
+    `SELECT schema_version_id FROM trials WHERE nct_id = $1`,
+    [nctId],
+  );
+  if (rows.length === 0) return null;
+  if (rows[0].schema_version_id) return rows[0].schema_version_id;
+  const sv = await query<{ id: string }>(
+    `SELECT id FROM schema_versions ORDER BY created_at DESC LIMIT 1`,
+  );
+  return sv[0]?.id ?? null;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Reference key (re-keyed on nct_id only)
+// ──────────────────────────────────────────────────────────────────────────
+
 export async function saveReferenceKeyAction(opts: {
-  setId: string;
   nctId: string;
   data: TrialAnswers;
 }): Promise<ActionResult> {
@@ -20,100 +38,171 @@ export async function saveReferenceKeyAction(opts: {
   try { session = await requireSession('reviewer'); }
   catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
 
-  const sets = await query<{ id: string; schema_version_id: string; locked_at: string | null; trial_nct_ids: string[] }>(
-    `SELECT id, schema_version_id, locked_at, trial_nct_ids FROM qualification_sets WHERE id = $1`,
-    [opts.setId],
-  );
-  const set = sets[0];
-  if (!set) return { ok: false, error: 'Set not found.' };
-  if (set.locked_at) return { ok: false, error: 'Set is locked. Reference key cannot be edited.' };
-  if (!set.trial_nct_ids.includes(opts.nctId)) {
-    return { ok: false, error: 'Trial does not belong to this set.' };
-  }
+  const svId = await trialSchemaVersionId(opts.nctId);
+  if (!svId) return { ok: false, error: 'Trial not found (or no schema version available).' };
 
-  await query(
-    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, built_by_reviewer_id, built_at)
-     VALUES ($1, $2, $3, $4::jsonb, $5, NOW())
-     ON CONFLICT (qualification_set_id, nct_id) DO UPDATE
-       SET key_data = EXCLUDED.key_data,
-           built_by_reviewer_id = EXCLUDED.built_by_reviewer_id,
-           built_at = NOW()`,
-    [opts.setId, opts.nctId, set.schema_version_id, JSON.stringify(opts.data), session.userId],
-  );
+  await query(`
+    INSERT INTO reference_keys (nct_id, schema_version_id, key_data, built_by_reviewer_id, built_at)
+    VALUES ($1, $2, $3::jsonb, $4, NOW())
+    ON CONFLICT (nct_id) DO UPDATE
+      SET key_data = EXCLUDED.key_data,
+          built_by_reviewer_id = EXCLUDED.built_by_reviewer_id,
+          built_at = NOW()
+  `, [opts.nctId, svId, JSON.stringify(opts.data), session.userId]);
   return { ok: true };
 }
 
-// Save notes + flags for a reference key. Trial must belong to the set
-// and set must not be locked.
 export async function saveReferenceKeyMetaAction(opts: {
-  setId: string; nctId: string; notes: string; flags: Record<string, boolean>;
+  nctId: string; notes: string; flags: Record<string, boolean>;
 }): Promise<ActionResult> {
   let session;
   try { session = await requireSession('reviewer'); }
   catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
 
-  const sets = await query<{ schema_version_id: string; locked_at: string | null }>(
-    `SELECT schema_version_id, locked_at FROM qualification_sets WHERE id = $1`,
-    [opts.setId],
-  );
-  if (!sets[0]) return { ok: false, error: 'Set not found.' };
-  if (sets[0].locked_at) return { ok: false, error: 'Set is locked.' };
+  const svId = await trialSchemaVersionId(opts.nctId);
+  if (!svId) return { ok: false, error: 'Trial not found.' };
 
-  // Upsert: if no reference key row exists yet, create an empty one with the meta
-  await query(
-    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, notes, flags, built_by_reviewer_id, built_at)
-     VALUES ($1, $2, $3, '{}'::jsonb, $4, $5::jsonb, $6, NOW())
-     ON CONFLICT (qualification_set_id, nct_id) DO UPDATE
-       SET notes = EXCLUDED.notes,
-           flags = EXCLUDED.flags,
-           built_by_reviewer_id = EXCLUDED.built_by_reviewer_id,
-           built_at = NOW()`,
-    [opts.setId, opts.nctId, sets[0].schema_version_id, opts.notes, JSON.stringify(opts.flags), session.userId],
-  );
+  await query(`
+    INSERT INTO reference_keys (nct_id, schema_version_id, key_data, notes, flags, built_by_reviewer_id, built_at)
+    VALUES ($1, $2, '{}'::jsonb, $3, $4::jsonb, $5, NOW())
+    ON CONFLICT (nct_id) DO UPDATE
+      SET notes = EXCLUDED.notes,
+          flags = EXCLUDED.flags,
+          built_by_reviewer_id = EXCLUDED.built_by_reviewer_id,
+          built_at = NOW()
+  `, [opts.nctId, svId, opts.notes, JSON.stringify(opts.flags), session.userId]);
   return { ok: true };
 }
 
-// Mark a reference key as complete (or un-complete). Single upsert so it
-// works whether or not a row exists yet, on every toggle.
-// Mark a reference key complete/incomplete. If the set is currently locked
-// AND the caller is unlocking the trial, also unlock the set (so experts
-// can no longer take it until the reviewer re-locks). Refusing to flip a
-// trial to "complete" on a locked set since that's redundant.
 export async function markReferenceKeyCompleteAction(opts: {
-  setId: string; nctId: string; complete: boolean;
+  nctId: string; complete: boolean;
 }): Promise<ActionResult> {
   let session;
   try { session = await requireSession('reviewer'); }
   catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
 
-  const sets = await query<{ schema_version_id: string; locked_at: string | null }>(
-    `SELECT schema_version_id, locked_at FROM qualification_sets WHERE id = $1`,
-    [opts.setId],
-  );
-  const set = sets[0];
-  if (!set) return { ok: false, error: 'Set not found.' };
-  if (set.locked_at && opts.complete) {
-    return { ok: false, error: 'Set is already locked.' };
-  }
+  const svId = await trialSchemaVersionId(opts.nctId);
+  if (!svId) return { ok: false, error: 'Trial not found.' };
 
-  // Cascade: unlocking a trial on a locked set also unlocks the set
-  if (set.locked_at && !opts.complete) {
-    await query(`UPDATE qualification_sets SET locked_at = NULL WHERE id = $1`, [opts.setId]);
-  }
+  await query(`
+    INSERT INTO reference_keys (nct_id, schema_version_id, key_data, complete, built_by_reviewer_id, built_at)
+    VALUES ($1, $2, '{}'::jsonb, $3, $4, NOW())
+    ON CONFLICT (nct_id) DO UPDATE
+      SET complete = EXCLUDED.complete,
+          built_by_reviewer_id = EXCLUDED.built_by_reviewer_id,
+          built_at = NOW()
+  `, [opts.nctId, svId, opts.complete, session.userId]);
+  return { ok: true };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Cohort matching (test-trial scoring)
+// ──────────────────────────────────────────────────────────────────────────
+
+// Save the reviewer's cohort-mapping for one expert's test-trial annotation
+// and recompute the score. Missing keys in the map mean "unmapped".
+export async function setCohortMappingAction(opts: {
+  expertId: string;
+  nctId: string;
+  mapping: Record<string, string>;
+}): Promise<ActionResult> {
+  try { await requireSession('reviewer'); }
+  catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
+
+  const rows = await query<{ id: string; is_test_trial: boolean }>(`
+    SELECT a.id, ta.is_test_trial
+    FROM annotations a
+    JOIN trial_assignments ta ON ta.expert_id = a.expert_id AND ta.nct_id = a.nct_id
+    WHERE a.expert_id = $1 AND a.nct_id = $2
+  `, [opts.expertId, opts.nctId]);
+  const row = rows[0];
+  if (!row) return { ok: false, error: 'Annotation not found.' };
+  if (!row.is_test_trial) return { ok: false, error: 'Cohort matching only applies to test trials.' };
 
   await query(
-    `INSERT INTO reference_keys (qualification_set_id, nct_id, schema_version_id, key_data, complete, built_by_reviewer_id, built_at)
-     VALUES ($1, $2, $3, '{}'::jsonb, $4, $5, NOW())
-     ON CONFLICT (qualification_set_id, nct_id) DO UPDATE
-       SET complete = EXCLUDED.complete,
-           built_by_reviewer_id = EXCLUDED.built_by_reviewer_id,
-           built_at = NOW()`,
-    [opts.setId, opts.nctId, set.schema_version_id, opts.complete, session.userId],
+    `UPDATE annotations SET cohort_map = $1::jsonb, updated_at = NOW() WHERE id = $2`,
+    [JSON.stringify(opts.mapping ?? {}), row.id],
+  );
+  // Rescore against the new mapping. Score is only meaningful once both
+  // a submission and a reference key exist; scoreAnnotation handles missing
+  // refs gracefully (treats them as empty).
+  const score = await scoreAnnotation(row.id);
+  await query(
+    `UPDATE annotations SET score_data = $1::jsonb, scored_at = NOW() WHERE id = $2`,
+    [JSON.stringify(score), row.id],
   );
   return { ok: true };
 }
 
-// Save the annotation guide markdown. Reviewer-only.
+// ──────────────────────────────────────────────────────────────────────────
+// Test-trial review gate
+// ──────────────────────────────────────────────────────────────────────────
+
+// Flip the test_reviewed_at flag on the (expert, trial) assignment. Sets
+// session.userId as the reviewer when marking; clears both fields when
+// un-reviewing.
+export async function markTestTrialReviewedAction(opts: {
+  expertId: string;
+  nctId: string;
+  reviewed: boolean;
+}): Promise<ActionResult> {
+  let session;
+  try { session = await requireSession('reviewer'); }
+  catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
+
+  const rows = await query<{ is_test_trial: boolean }>(
+    `SELECT is_test_trial FROM trial_assignments WHERE expert_id = $1 AND nct_id = $2`,
+    [opts.expertId, opts.nctId],
+  );
+  if (!rows[0]) return { ok: false, error: 'Assignment not found.' };
+  if (!rows[0].is_test_trial) return { ok: false, error: 'Not a test trial.' };
+
+  if (opts.reviewed) {
+    await query(`
+      UPDATE trial_assignments
+      SET test_reviewed_at = NOW(), test_reviewed_by = $1
+      WHERE expert_id = $2 AND nct_id = $3
+    `, [session.userId, opts.expertId, opts.nctId]);
+  } else {
+    await query(`
+      UPDATE trial_assignments
+      SET test_reviewed_at = NULL, test_reviewed_by = NULL
+      WHERE expert_id = $1 AND nct_id = $2
+    `, [opts.expertId, opts.nctId]);
+  }
+  return { ok: true };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Annotation reset (reviewer-only)
+// ──────────────────────────────────────────────────────────────────────────
+
+// Wipe one expert's annotation on one trial. They can restart from scratch.
+// Also clears any test-review flag on the matching assignment so they're not
+// stuck "reviewed" with no submitted answers.
+export async function resetAnnotationAction(opts: {
+  expertId: string;
+  nctId: string;
+}): Promise<ActionResult> {
+  try { await requireSession('reviewer'); }
+  catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
+
+  await query(
+    `DELETE FROM annotations WHERE expert_id = $1 AND nct_id = $2`,
+    [opts.expertId, opts.nctId],
+  );
+  await query(`
+    UPDATE trial_assignments
+    SET test_reviewed_at = NULL, test_reviewed_by = NULL
+    WHERE expert_id = $1 AND nct_id = $2 AND is_test_trial = TRUE
+  `, [opts.expertId, opts.nctId]);
+  return { ok: true };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Annotation guide
+// ──────────────────────────────────────────────────────────────────────────
+
 export async function saveGuideAction(markdown: string): Promise<ActionResult> {
   let session;
   try { session = await requireSession('reviewer'); }
@@ -123,49 +212,5 @@ export async function saveGuideAction(markdown: string): Promise<ActionResult> {
   if (markdown.length > 500_000) return { ok: false, error: 'Guide too large.' };
 
   await saveGuide(markdown, session.userId);
-  return { ok: true };
-}
-
-// Wipe a expert's attempt entirely. They can retake from scratch.
-export async function resetAttemptAction(attemptId: string): Promise<ActionResult> {
-  try { await requireSession('reviewer'); }
-  catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
-
-  const r = await query<{ id: string }>(
-    `DELETE FROM qualification_attempts WHERE id = $1 RETURNING id`,
-    [attemptId],
-  );
-  if (r.length === 0) return { ok: false, error: 'Attempt not found.' };
-  return { ok: true };
-}
-
-// Lock a set so experts can take it. Requires EVERY trial to have a
-// reference key marked complete.
-export async function lockSetAction(setId: string): Promise<ActionResult> {
-  try { await requireSession('reviewer'); }
-  catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
-
-  const sets = await query<{ trial_nct_ids: string[]; locked_at: string | null }>(
-    `SELECT trial_nct_ids, locked_at FROM qualification_sets WHERE id = $1`,
-    [setId],
-  );
-  const set = sets[0];
-  if (!set) return { ok: false, error: 'Set not found.' };
-  if (set.locked_at) return { ok: false, error: 'Already locked.' };
-
-  const completes = await query<{ n: number }>(
-    `SELECT COUNT(*)::int AS n FROM reference_keys
-     WHERE qualification_set_id = $1 AND complete = TRUE`,
-    [setId],
-  );
-  const completeCount = completes[0]?.n ?? 0;
-  if (completeCount < set.trial_nct_ids.length) {
-    return {
-      ok: false,
-      error: `Cannot lock: ${set.trial_nct_ids.length - completeCount} trials are not yet marked complete.`,
-    };
-  }
-
-  await query(`UPDATE qualification_sets SET locked_at = NOW() WHERE id = $1`, [setId]);
   return { ok: true };
 }

@@ -56,10 +56,8 @@ export interface UserRow {
   id: string;
   name: string;
   role: UserRole;
-  dob_hash: string;
+  password_hash: string;
   created_at: string;
-  corpus_approved_at: string | null;
-  corpus_approved_by: string | null;
 }
 
 export interface SchemaVersionRow {
@@ -69,16 +67,8 @@ export interface SchemaVersionRow {
   created_at: string;
 }
 
-export interface QualificationSetRow {
-  id: string;
-  name: string;
-  schema_version_id: string;
-  trial_nct_ids: string[];
-  locked_at: string | null;
-  created_at: string;
-}
-
-export interface QualificationTrialRow {
+// Global trial catalog.
+export interface TrialRow {
   nct_id: string;
   brief_title: string;
   brief_summary: string | null;
@@ -92,12 +82,50 @@ export interface QualificationTrialRow {
   overall_status: string | null;
   study_type: string | null;
   phases: string[] | null;
-  assigned_blocks: string[];
+  assigned_cancer_types: string[];
+  schema_version_id: string | null;
+  position: number;
   fetched_at: string;
 }
 
+// Per-expert assignment. is_test_trial flags the gate trials the expert must
+// complete; test_reviewed_at is set when a reviewer marks that submission
+// reviewed. The expert's non-test trials are unlocked iff no test-trial row
+// of theirs has test_reviewed_at IS NULL.
+export interface TrialAssignmentRow {
+  expert_id: string;
+  nct_id: string;
+  is_test_trial: boolean;
+  test_reviewed_at: string | null;
+  test_reviewed_by: string | null;
+  assigned_at: string;
+}
+
+export type AnnotationStatus = 'in_progress' | 'submitted';
+
+// Trial-centric annotation. One row per (trial, expert). cohort_map is the
+// reviewer's mapping { expertCohortKey → referenceCohortKey } applied at
+// scoring time; missing entries mean unmapped. score_data is only populated
+// for test trials (computed at submit time, recomputed on cohort_map change).
+export interface AnnotationRow {
+  id: string;
+  nct_id: string;
+  expert_id: string;
+  schema_version_id: string | null;
+  answers: Record<string, unknown>;     // TrialAnswers shape
+  notes: string;
+  flags: Record<string, boolean>;
+  status: AnnotationStatus;
+  cohort_map: Record<string, string>;
+  score_data: Record<string, unknown> | null;
+  scored_at: string | null;
+  started_at: string;
+  submitted_at: string | null;
+  updated_at: string;
+}
+
+// Reviewer's ground truth for one trial. Re-keyed on nct_id alone — no set.
 export interface ReferenceKeyRow {
-  qualification_set_id: string;
   nct_id: string;
   schema_version_id: string;
   key_data: Record<string, unknown>;
@@ -108,76 +136,22 @@ export interface ReferenceKeyRow {
   built_at: string;
 }
 
-export interface PerTrialMeta {
-  notes: string;
-  flags: Record<string, boolean>;
-}
-
-export type AttemptStatus = 'in_progress' | 'submitted' | 'passed' | 'failed';
-
-export interface QualificationAttemptRow {
-  id: string;
-  expert_id: string;
-  qualification_set_id: string;
-  schema_version_id: string;
-  answers: Record<string, unknown>;
-  per_trial_meta: Record<string, PerTrialMeta>;
-  completed_nct_ids: string[];
-  status: AttemptStatus;
-  score_data: Record<string, unknown> | null;
-  started_at: string;
-  submitted_at: string | null;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// Production corpus (post-qualification labeling phase)
-// ──────────────────────────────────────────────────────────────────────────
-
-// Every corpus trial needs this many independent expert reviews to be done.
-export const MAX_CORPUS_REVIEWS = 2;
-
-export interface CorpusTrialRow {
+// Per-field reviewer adjudication. cohort_key + cancer_type identify where
+// in the two-level TrialAnswers shape the adjudicated field lives. Trial-
+// level fields use the sentinel `__TRIAL__` in both columns (see
+// TRIAL_LEVEL_SENTINEL in types.ts). final_value wraps the FieldValue as
+// {"v": ...} so JSON null is distinguishable from SQL NULL.
+export interface TrialAdjudicationRow {
   nct_id: string;
-  brief_title: string;
-  brief_summary: string | null;
-  detailed_description: string | null;
-  eligibility_raw: string | null;
-  conditions: string[];
-  interventions: string[];
-  ctgov_sex: string | null;
-  ctgov_min_age: string | null;
-  ctgov_max_age: string | null;
-  overall_status: string | null;
-  study_type: string | null;
-  phases: string[] | null;
-  assigned_blocks: string[];
-  ai_answers: Record<string, unknown>;
-  schema_version_id: string | null;
-  position: number;
-  fetched_at: string;
-}
-
-export type CorpusReviewStatus = 'in_progress' | 'submitted';
-
-export interface CorpusReviewRow {
-  id: string;
-  nct_id: string;
-  expert_id: string;
-  answers: Record<string, unknown>;
-  notes: string;
-  flags: Record<string, boolean>;
-  status: CorpusReviewStatus;
-  claimed_at: string;
-  submitted_at: string | null;
-  updated_at: string;
-}
-
-export interface CorpusAdjudicationRow {
-  nct_id: string;
-  block_key: string;
+  cohort_key: string;
+  cancer_type: string;
   field_key: string;
-  // FieldValue wrapped as {"v": ...} so JSON null ≠ SQL NULL
   final_value: { v: unknown };
   decided_by: string | null;
   decided_at: string;
 }
+
+// Every non-test trial needs this many independent expert annotations before
+// it can be adjudicated. Enforced in startOrResumeAnnotation by counting
+// existing non-test annotations on the trial before creating a new one.
+export const MAX_ANNOTATIONS_PER_TRIAL = 2;

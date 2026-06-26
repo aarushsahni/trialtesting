@@ -81,8 +81,8 @@ const SCHEMA_SECTIONS: Record<string, string> = {
     "pi3kAktPathwayStatus": ["ALTERED" | "WILD_TYPE"] | null, // PIK3CA / AKT1 / PTEN pathway alteration (capivasertib eligibility)
     "esr1Status": ["MUTATED" | "WILD_TYPE"] | null, // ESR1 ligand-binding-domain mutation (elacestrant eligibility)
     "pdl1Status": ["POSITIVE" | "NEGATIVE"] | null, // PD-L1 expression status (typically IC for TNBC)
-    "priorTherapyRequired": ["ENDOCRINE_THERAPY" | "CDK46_INHIBITOR" | "CHEMOTHERAPY_ADVANCED" | "HER2_DIRECTED_THERAPY" | "ANTIBODY_DRUG_CONJUGATE"] | null, // Therapies trial requires patient to have received
-    "priorTherapyExcluded": ["ENDOCRINE_THERAPY" | "CDK46_INHIBITOR" | "CHEMOTHERAPY_ADVANCED" | "HER2_DIRECTED_THERAPY" | "ANTIBODY_DRUG_CONJUGATE"] | null, // Therapies trial excludes prior exposure to
+    "priorTherapyRequired": ["ENDOCRINE_THERAPY" | "CDK46_INHIBITOR" | "HER2_DIRECTED_THERAPY" | "ANTIBODY_DRUG_CONJUGATE" | "TAXANE" | "ANTHRACYCLINE" | "PLATINUM" | "CYCLOPHOSPHAMIDE"] | null, // Therapies trial requires patient to have received
+    "priorTherapyExcluded": ["ENDOCRINE_THERAPY" | "CDK46_INHIBITOR" | "HER2_DIRECTED_THERAPY" | "ANTIBODY_DRUG_CONJUGATE" | "TAXANE" | "ANTHRACYCLINE" | "PLATINUM" | "CYCLOPHOSPHAMIDE"] | null, // Therapies trial excludes prior exposure to
     "minPriorSystemicLines": number | null, // Minimum prior lines of systemic therapy
     "maxPriorSystemicLines": number | null // Maximum prior lines of systemic therapy allowed
   } | null`,
@@ -250,7 +250,7 @@ const SCHEMA_SECTIONS: Record<string, string> = {
   } | null`,
 
   cns: `  "cns": {
-    "histology": ["GLIOBLASTOMA" | "ASTROCYTOMA" | "OLIGODENDROGLIOMA" | "EPENDYMOMA" | "MEDULLOBLASTOMA" | "MENINGIOMA" | "PRIMARY_CNS_LYMPHOMA" | "OTHER"] | null, // WHO CNS tumor histology
+    "histology": ["GLIOBLASTOMA" | "ASTROCYTOMA" | "OLIGODENDROGLIOMA" | "EPENDYMOMA" | "MEDULLOBLASTOMA" | "MENINGIOMA" | "OTHER"] | null, // WHO CNS tumor histology
     "whoGrade": ["1" | "2" | "3" | "4"] | null, // WHO CNS grade
     "diseaseStatus": ["NEWLY_DIAGNOSED" | "RECURRENT_PROGRESSIVE"] | null, // Newly diagnosed vs recurrent/progressive after first-line
     "idhStatus": ["MUTANT" | "WILD_TYPE"] | null, // IDH1/2 mutation status (defining for adult diffuse gliomas)

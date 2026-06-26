@@ -2,18 +2,19 @@
 
 import { redirect } from 'next/navigation';
 import {
+  assignTestTrialsToExpert,
   reviewerPasskeyConfigured,
   reviewerPasskeyMatches,
   clearSession,
-  compareDob,
+  comparePassword,
   createSession,
   createUser,
   findUserByName,
   getUserById,
-  normalizeDob,
   readSession,
-  updateUserDob,
   updateUserName,
+  updateUserPassword,
+  validatePassword,
 } from '@/lib/auth';
 
 export interface ActionResult {
@@ -27,7 +28,8 @@ export interface ActionResult {
 
 export async function signupAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const name = String(formData.get('name') || '').trim();
-  const dobRaw = String(formData.get('dob') || '').trim();
+  const password = String(formData.get('password') || '');
+  const passwordConfirm = String(formData.get('passwordConfirm') || '');
   const role = String(formData.get('role') || '').trim();
   const passkey = String(formData.get('passkey') || '').trim();
 
@@ -37,8 +39,11 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
     return { ok: false, error: 'Pick a role.' };
   }
 
-  const dob = normalizeDob(dobRaw);
-  if (!dob) return { ok: false, error: 'Date of birth must be MM/DD/YYYY.' };
+  const pwError = validatePassword(password);
+  if (pwError) return { ok: false, error: pwError };
+  if (password !== passwordConfirm) {
+    return { ok: false, error: 'Passwords do not match.' };
+  }
 
   if (role === 'reviewer') {
     if (!reviewerPasskeyConfigured()) {
@@ -61,12 +66,16 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
 
   let user;
   try {
-    user = await createUser({ name, role, dob });
+    user = await createUser({ name, role, password });
   } catch (e: any) {
     if (e?.code === '23505') {
       return { ok: false, error: 'Name already taken. Pick a different one.' };
     }
     throw e;
+  }
+
+  if (user.role === 'expert') {
+    await assignTestTrialsToExpert(user.id);
   }
 
   await createSession({ userId: user.id, name: user.name, role: user.role });
@@ -79,18 +88,16 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
 
 export async function loginAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const name = String(formData.get('name') || '').trim();
-  const dobRaw = String(formData.get('dob') || '').trim();
+  const password = String(formData.get('password') || '');
 
   if (!name) return { ok: false, error: 'Pick a name.' };
-
-  const dob = normalizeDob(dobRaw);
-  if (!dob) return { ok: false, error: 'Date of birth must be MM/DD/YYYY.' };
+  if (!password) return { ok: false, error: 'Password is required.' };
 
   const user = await findUserByName(name);
   if (!user) return { ok: false, error: 'No account with that name.' };
 
-  const dobOk = await compareDob(dob, user.dob_hash);
-  if (!dobOk) return { ok: false, error: 'Incorrect date of birth.' };
+  const pwOk = await comparePassword(password, user.password_hash);
+  if (!pwOk) return { ok: false, error: 'Incorrect password.' };
 
   await createSession({ userId: user.id, name: user.name, role: user.role });
   redirect(user.role === 'reviewer' ? '/review' : '/expert');
@@ -117,16 +124,19 @@ export async function updateAccountAction(_prev: ActionResult, formData: FormDat
   if (!user) return { ok: false, error: 'Account not found.' };
 
   const newName = String(formData.get('name') || '').trim();
-  const newDobRaw = String(formData.get('dob') || '').trim();
+  const newPassword = String(formData.get('password') || '');
+  const newPasswordConfirm = String(formData.get('passwordConfirm') || '');
 
   if (!newName) return { ok: false, error: 'Name is required.' };
   if (newName.length > 80) return { ok: false, error: 'Name too long.' };
 
-  // If the user typed a new DOB, validate it; otherwise leave existing hash.
-  let normalizedNewDob: string | null = null;
-  if (newDobRaw) {
-    normalizedNewDob = normalizeDob(newDobRaw);
-    if (!normalizedNewDob) return { ok: false, error: 'Date of birth must be MM/DD/YYYY.' };
+  // Password is optional on update — only validate if a new one was entered.
+  if (newPassword || newPasswordConfirm) {
+    const pwError = validatePassword(newPassword);
+    if (pwError) return { ok: false, error: pwError };
+    if (newPassword !== newPasswordConfirm) {
+      return { ok: false, error: 'Passwords do not match.' };
+    }
   }
 
   // If renaming, ensure no collision with another user
@@ -143,8 +153,8 @@ export async function updateAccountAction(_prev: ActionResult, formData: FormDat
     }
   }
 
-  if (normalizedNewDob) {
-    await updateUserDob(user.id, normalizedNewDob);
+  if (newPassword) {
+    await updateUserPassword(user.id, newPassword);
   }
 
   // Refresh session cookie with possibly-updated name (role unchanged)

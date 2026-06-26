@@ -1,107 +1,116 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { readSession } from '@/lib/auth';
-import { query } from '@/lib/db';
+import { query, MAX_ANNOTATIONS_PER_TRIAL } from '@/lib/db';
 import { AppHeader } from '@/components/AppHeader';
 
 export const dynamic = 'force-dynamic';
 
-interface SetSummary {
-  id: string;
-  name: string;
+interface Stats {
   trial_count: number;
-  complete_count: number;
-  locked_at: string | null;
+  refkeys_total: number;
+  refkeys_complete: number;
+  expert_count: number;
+  pending_test_reviews: number;
+  trials_ready_to_adjudicate: number;
 }
 
-export default async function AnnotateHome() {
+export default async function ReviewHub() {
   const session = await readSession();
   if (!session) redirect('/login');
   if (session.role !== 'reviewer') redirect('/expert');
 
-  const sets = await query<SetSummary>(`
-    SELECT qs.id, qs.name, qs.locked_at,
-           array_length(qs.trial_nct_ids, 1) AS trial_count,
-           (SELECT COUNT(*) FROM reference_keys rk
-              WHERE rk.qualification_set_id = qs.id AND rk.complete = TRUE)::int AS complete_count
-    FROM qualification_sets qs
-    ORDER BY qs.created_at DESC
+  const rows = await query<Stats>(`
+    SELECT
+      (SELECT COUNT(*) FROM trials WHERE is_test_trial = TRUE)::int AS trial_count,
+      (SELECT COUNT(*) FROM reference_keys rk
+         JOIN trials t ON t.nct_id = rk.nct_id
+         WHERE t.is_test_trial = TRUE)::int AS refkeys_total,
+      (SELECT COUNT(*) FROM reference_keys rk
+         JOIN trials t ON t.nct_id = rk.nct_id
+         WHERE rk.complete = TRUE AND t.is_test_trial = TRUE)::int AS refkeys_complete,
+      (SELECT COUNT(*) FROM users WHERE role = 'expert')::int AS expert_count,
+      (SELECT COUNT(*) FROM annotations a
+         JOIN trial_assignments ta ON ta.expert_id = a.expert_id AND ta.nct_id = a.nct_id
+         WHERE ta.is_test_trial = TRUE
+           AND ta.test_reviewed_at IS NULL
+           AND a.status = 'submitted')::int AS pending_test_reviews,
+      (SELECT COUNT(*) FROM (
+        SELECT a.nct_id
+        FROM annotations a
+        JOIN trial_assignments ta ON ta.expert_id = a.expert_id AND ta.nct_id = a.nct_id
+        WHERE a.status = 'submitted' AND ta.is_test_trial = FALSE
+        GROUP BY a.nct_id
+        HAVING COUNT(*) >= ${MAX_ANNOTATIONS_PER_TRIAL}
+      ) d)::int AS trials_ready_to_adjudicate
   `);
+  const s = rows[0];
 
   return (
     <div className="min-h-screen bg-slate-50">
       <AppHeader name={session.name} role={session.role} />
       <main className="max-w-5xl mx-auto px-6 py-10">
-        <div className="mb-8 flex items-baseline justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Qualification sets</h1>
-            <p className="text-sm text-slate-600 mt-1">
-              Build the reference key for each trial. When complete, lock the set so
-              experts can take it.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Link
-              href="/review/corpus"
-              className="text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg hover:border-blue-400 hover:text-blue-700 transition whitespace-nowrap"
-            >
-              Trial corpus →
-            </Link>
-            <Link
-              href="/review/scores"
-              className="text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg hover:border-blue-400 hover:text-blue-700 transition whitespace-nowrap"
-            >
-              Expert scores →
-            </Link>
-          </div>
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-slate-900">Reviewer dashboard</h1>
+          <p className="text-sm text-slate-600 mt-1">
+            Build reference keys, review experts&apos; test trials, and adjudicate disagreements on the rest.
+          </p>
         </div>
 
-        {sets.length === 0 ? (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-sm text-amber-900">
-            <p className="font-medium">No qualification sets yet.</p>
-            <p className="mt-1">
-              Run <code className="bg-amber-100 px-1.5 py-0.5 rounded">npm run seed-qualification</code> to fetch trials.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {sets.map((s) => {
-              const pct = s.trial_count ? Math.round((s.complete_count / s.trial_count) * 100) : 0;
-              return (
-                <Link
-                  key={s.id}
-                  href={`/review/sets/${s.id}`}
-                  className="block bg-white border border-slate-200 rounded-2xl p-5 shadow-sm shadow-blue-100/30 hover:border-blue-400 transition"
-                >
-                  <div className="flex items-baseline justify-between">
-                    <div>
-                      <h3 className="font-semibold text-slate-900">{s.name}</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {s.trial_count} trials · {s.complete_count} complete
-                      </p>
-                    </div>
-                    {s.locked_at ? (
-                      <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-1 rounded">
-                        Locked
-                      </span>
-                    ) : (
-                      <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-1 rounded">
-                        In progress
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card
+            href="/review/trials"
+            title="Test trials"
+            description="Build reference keys for the trials that gate expert qualification."
+            stat={`${s.refkeys_complete} / ${s.trial_count} reference keys complete`}
+            accent="text-blue-700"
+          />
+          <Card
+            href="/review/experts"
+            title="Experts"
+            description="Per-expert test-trial progress and reviews."
+            stat={
+              s.pending_test_reviews > 0
+                ? `${s.pending_test_reviews} pending test review${s.pending_test_reviews === 1 ? '' : 's'}`
+                : `${s.expert_count} expert${s.expert_count === 1 ? '' : 's'}`
+            }
+            accent={s.pending_test_reviews > 0 ? 'text-amber-700' : 'text-slate-700'}
+          />
+          <Card
+            href="/review/adjudicate"
+            title="Adjudicate"
+            description={`Resolve disagreements on trials with ${MAX_ANNOTATIONS_PER_TRIAL} submitted annotations.`}
+            stat={
+              s.trials_ready_to_adjudicate > 0
+                ? `${s.trials_ready_to_adjudicate} trial${s.trials_ready_to_adjudicate === 1 ? '' : 's'} ready to adjudicate`
+                : 'No trials ready yet'
+            }
+            accent={s.trials_ready_to_adjudicate > 0 ? 'text-purple-700' : 'text-slate-700'}
+          />
+          <Card
+            href="/review/scores"
+            title="Scores"
+            description="Per-expert F1 across their test trials."
+            stat=""
+            accent="text-slate-700"
+          />
+        </div>
       </main>
     </div>
+  );
+}
+
+function Card({
+  href, title, description, stat, accent,
+}: { href: string; title: string; description: string; stat: string; accent: string }) {
+  return (
+    <Link
+      href={href}
+      className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm shadow-blue-100/30 hover:border-blue-400 transition"
+    >
+      <div className="text-lg font-semibold text-slate-900">{title}</div>
+      <div className="text-sm text-slate-600 mt-1">{description}</div>
+      {stat && <div className={`text-xs mt-3 font-semibold ${accent}`}>{stat}</div>}
+    </Link>
   );
 }

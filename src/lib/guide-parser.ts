@@ -7,38 +7,38 @@
 //   |---|---|---|---|
 //   | `fieldKey` | ... | the description we want | ... |
 
-import { BlockKey } from './types';
+import { CancerType } from './types';
 
-// Map from H2 heading text in the guide to BlockKey.
-// Kept in sync with /guide page's HEADING_TO_BLOCK.
-const HEADING_TO_BLOCK: Record<string, BlockKey> = {
-  'Prostate': 'prostate',
-  'Urothelial / Bladder': 'urothelial',
-  'Renal Cell Carcinoma (RCC)': 'rcc',
-  'Testicular / Germ Cell': 'testicular',
-  'Breast': 'breast',
-  'Lung': 'lung',
-  'Colorectal': 'colorectal',
-  'Head & Neck': 'head_and_neck',
-  'Ovarian / Fallopian / Primary Peritoneal': 'ovarian',
-  'Uterine / Endometrial': 'uterine',
-  'Cervical': 'cervical',
-  'Melanoma': 'melanoma',
-  'Mesothelioma': 'mesothelioma',
-  'Gastroesophageal (Gastric / GEJ / Esophageal)': 'gastroesophageal',
-  'Neuroendocrine Tumors': 'neuroendocrine',
-  'Pancreatic': 'pancreatic',
-  'CNS / Glioma': 'cns',
-  'Hepatocellular Carcinoma (HCC)': 'hcc',
-  'Biliary Tract (Cholangiocarcinoma / Gallbladder)': 'biliary',
-  'Mature B-Cell Lymphoma': 'mature_b_cell',
-  'Mature T/NK-Cell Lymphoma': 'mature_t_nk_cell',
-  'Myeloid Neoplasms (AML / MDS / MPN / CML)': 'myeloid_neoplasm',
-  'Precursor Lymphoid (ALL / LBL)': 'precursor_lymphoid',
-  'Plasma Cell (Myeloma / Amyloidosis)': 'plasma_cell',
+// Map from H2 heading text in the guide to CancerType (UPPERCASE).
+// Kept in sync with /guide page's HEADING_TO_CANCER_TYPE.
+const HEADING_TO_CANCER_TYPE: Record<string, CancerType> = {
+  'Prostate': 'PROSTATE',
+  'Urothelial / Bladder': 'UROTHELIAL',
+  'Renal Cell Carcinoma (RCC)': 'RCC',
+  'Testicular / Germ Cell': 'TESTICULAR',
+  'Breast': 'BREAST',
+  'Lung': 'LUNG',
+  'Colorectal': 'COLORECTAL',
+  'Head & Neck': 'HEAD_AND_NECK',
+  'Ovarian / Fallopian / Primary Peritoneal': 'OVARIAN',
+  'Uterine / Endometrial': 'UTERINE',
+  'Cervical': 'CERVICAL',
+  'Melanoma': 'MELANOMA',
+  'Mesothelioma': 'MESOTHELIOMA',
+  'Gastroesophageal (Gastric / GEJ / Esophageal)': 'GASTROESOPHAGEAL',
+  'Neuroendocrine Tumors': 'NEUROENDOCRINE',
+  'Pancreatic': 'PANCREATIC',
+  'CNS / Glioma': 'CNS',
+  'Hepatocellular Carcinoma (HCC)': 'HCC',
+  'Biliary Tract (Cholangiocarcinoma / Gallbladder)': 'BILIARY',
+  'Mature B-Cell Lymphoma': 'MATURE_B_CELL',
+  'Mature T/NK-Cell Lymphoma': 'MATURE_T_NK_CELL',
+  'Myeloid Neoplasms (AML / MDS / MPN / CML)': 'MYELOID_NEOPLASM',
+  'Precursor Lymphoid (ALL / LBL)': 'PRECURSOR_LYMPHOID',
+  'Plasma Cell (Myeloma / Amyloidosis)': 'PLASMA_CELL',
 };
 
-export type HelpTextMap = Partial<Record<BlockKey, Record<string, string>>>;
+export type HelpTextMap = Partial<Record<CancerType, Record<string, string>>>;
 
 /**
  * Walk the markdown, find each H2 block section, parse its field table.
@@ -55,8 +55,8 @@ export function parseGuideHelpText(markdown: string): HelpTextMap {
     const newlineIdx = chunk.indexOf('\n');
     if (newlineIdx === -1) continue;
     const heading = chunk.slice(0, newlineIdx).trim();
-    const blockKey = HEADING_TO_BLOCK[heading];
-    if (!blockKey) continue;
+    const cancerType = HEADING_TO_CANCER_TYPE[heading];
+    if (!cancerType) continue;
 
     const body = chunk.slice(newlineIdx + 1);
     const fields: Record<string, string> = {};
@@ -102,7 +102,7 @@ export function parseGuideHelpText(markdown: string): HelpTextMap {
     }
 
     if (Object.keys(fields).length > 0) {
-      out[blockKey] = fields;
+      out[cancerType] = fields;
     }
   }
 

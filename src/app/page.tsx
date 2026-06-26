@@ -17,10 +17,10 @@ export default async function HomePage() {
           </div>
           <div>
             <h1 className="text-base font-semibold text-slate-900 leading-tight">
-              Clinical Trial Extraction — Qualification Phase
+              Clinical Trial Annotation
             </h1>
             <p className="text-xs text-slate-500 leading-tight">
-              Sign in to take the test, or build the reference key
+              Sign in to annotate your assigned trials, or build the reference keys
             </p>
           </div>
         </div>
@@ -28,15 +28,12 @@ export default async function HomePage() {
 
       <main className="max-w-3xl mx-auto px-6 py-12 lg:py-20">
         <section className="text-center mb-12">
-          <span className="inline-block text-xs uppercase tracking-wider text-blue-700 bg-blue-100 px-3 py-1 rounded-full font-semibold mb-4">
-            Qualification phase
-          </span>
           <h2 className="text-3xl lg:text-5xl font-bold text-slate-900 leading-tight mb-4">
             Welcome
           </h2>
           <p className="text-base lg:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Two ways to participate. Experts take a fixed-trial test labeled blind
-            against an expert reference key. Reviewers build that reference key.
+            Experts annotate their assigned trials — test trials first, then the rest unlock
+            once the reviewer signs off. Reviewers build reference keys and adjudicate.
           </p>
         </section>
 

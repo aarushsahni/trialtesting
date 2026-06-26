@@ -9,36 +9,38 @@ import { getCurrentGuide } from '@/lib/guide-store';
 
 export const dynamic = 'force-dynamic';
 
-// Map heading text in the markdown to BlockKey for sidebar anchor links.
+// Map heading text in the markdown to anchor IDs for sidebar links. Block
+// IDs use the UPPERCASE CancerType so they line up with BLOCKS[ct].key.
 // Kept in sync with src/lib/guide-parser.ts.
-const HEADING_TO_BLOCK: Record<string, string> = {
+const HEADING_TO_ID: Record<string, string> = {
   'General annotation rules': 'general-rules',
+  'Cohorts and trial-level fields': 'cohorts-and-trial-level-fields',
   'Field-type quick reference': 'field-type-quick-reference',
   'Adjudication note template': 'adjudication-note-template',
-  'Prostate': 'prostate',
-  'Urothelial / Bladder': 'urothelial',
-  'Renal Cell Carcinoma (RCC)': 'rcc',
-  'Testicular / Germ Cell': 'testicular',
-  'Breast': 'breast',
-  'Lung': 'lung',
-  'Colorectal': 'colorectal',
-  'Head & Neck': 'head_and_neck',
-  'Ovarian / Fallopian / Primary Peritoneal': 'ovarian',
-  'Uterine / Endometrial': 'uterine',
-  'Cervical': 'cervical',
-  'Melanoma': 'melanoma',
-  'Mesothelioma': 'mesothelioma',
-  'Gastroesophageal (Gastric / GEJ / Esophageal)': 'gastroesophageal',
-  'Neuroendocrine Tumors': 'neuroendocrine',
-  'Pancreatic': 'pancreatic',
-  'CNS / Glioma': 'cns',
-  'Hepatocellular Carcinoma (HCC)': 'hcc',
-  'Biliary Tract (Cholangiocarcinoma / Gallbladder)': 'biliary',
-  'Mature B-Cell Lymphoma': 'mature_b_cell',
-  'Mature T/NK-Cell Lymphoma': 'mature_t_nk_cell',
-  'Myeloid Neoplasms (AML / MDS / MPN / CML)': 'myeloid_neoplasm',
-  'Precursor Lymphoid (ALL / LBL)': 'precursor_lymphoid',
-  'Plasma Cell (Myeloma / Amyloidosis)': 'plasma_cell',
+  'Prostate': 'PROSTATE',
+  'Urothelial / Bladder': 'UROTHELIAL',
+  'Renal Cell Carcinoma (RCC)': 'RCC',
+  'Testicular / Germ Cell': 'TESTICULAR',
+  'Breast': 'BREAST',
+  'Lung': 'LUNG',
+  'Colorectal': 'COLORECTAL',
+  'Head & Neck': 'HEAD_AND_NECK',
+  'Ovarian / Fallopian / Primary Peritoneal': 'OVARIAN',
+  'Uterine / Endometrial': 'UTERINE',
+  'Cervical': 'CERVICAL',
+  'Melanoma': 'MELANOMA',
+  'Mesothelioma': 'MESOTHELIOMA',
+  'Gastroesophageal (Gastric / GEJ / Esophageal)': 'GASTROESOPHAGEAL',
+  'Neuroendocrine Tumors': 'NEUROENDOCRINE',
+  'Pancreatic': 'PANCREATIC',
+  'CNS / Glioma': 'CNS',
+  'Hepatocellular Carcinoma (HCC)': 'HCC',
+  'Biliary Tract (Cholangiocarcinoma / Gallbladder)': 'BILIARY',
+  'Mature B-Cell Lymphoma': 'MATURE_B_CELL',
+  'Mature T/NK-Cell Lymphoma': 'MATURE_T_NK_CELL',
+  'Myeloid Neoplasms (AML / MDS / MPN / CML)': 'MYELOID_NEOPLASM',
+  'Precursor Lymphoid (ALL / LBL)': 'PRECURSOR_LYMPHOID',
+  'Plasma Cell (Myeloma / Amyloidosis)': 'PLASMA_CELL',
 };
 
 export default async function GuidePage() {
@@ -57,6 +59,9 @@ export default async function GuidePage() {
             <nav className="text-sm space-y-1.5 pb-3 border-b border-slate-200 mb-3">
               <a href="#general-rules" className="block font-semibold text-blue-700 hover:underline">
                 ↑ General annotation rules
+              </a>
+              <a href="#cohorts-and-trial-level-fields" className="block text-slate-700 hover:text-blue-700 hover:underline">
+                Cohorts and trial-level fields
               </a>
               <a href="#field-type-quick-reference" className="block text-slate-700 hover:text-blue-700 hover:underline">
                 Field-type quick reference
@@ -103,10 +108,10 @@ export default async function GuidePage() {
             {session.role === 'reviewer' ? (
               <GuideEditor
                 initial={guideMarkdown}
-                headingToId={HEADING_TO_BLOCK}
+                headingToId={HEADING_TO_ID}
               />
             ) : (
-              <GuideMarkdown source={guideMarkdown} headingToId={HEADING_TO_BLOCK} />
+              <GuideMarkdown source={guideMarkdown} headingToId={HEADING_TO_ID} />
             )}
           </div>
         </article>

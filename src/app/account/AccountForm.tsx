@@ -2,7 +2,6 @@
 
 import { useActionState } from 'react';
 import { updateAccountAction, ActionResult } from '../actions/auth';
-import { DobInput } from '@/components/DobInput';
 
 const initial: ActionResult = { ok: true };
 
@@ -34,13 +33,34 @@ export function AccountForm({ currentName, role }: { currentName: string; role: 
       </div>
 
       <div>
-        <label htmlFor="dob" className="text-xs uppercase tracking-wider text-slate-500 font-semibold block mb-2">
-          New date of birth <span className="text-slate-400 normal-case font-normal">(MM/DD/YYYY)</span>
+        <label htmlFor="password" className="text-xs uppercase tracking-wider text-slate-500 font-semibold block mb-2">
+          New password
         </label>
-        <DobInput id="dob" name="dob" />
+        <input
+          id="password"
+          name="password"
+          type="password"
+          minLength={8}
+          autoComplete="new-password"
+          className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
         <p className="text-xs text-slate-400 mt-1.5">
-          Leave blank to keep your current DOB. Fill in only if you want to change it.
+          Leave blank to keep your current password. At least 8 characters if changing.
         </p>
+      </div>
+
+      <div>
+        <label htmlFor="passwordConfirm" className="text-xs uppercase tracking-wider text-slate-500 font-semibold block mb-2">
+          Re-enter new password
+        </label>
+        <input
+          id="passwordConfirm"
+          name="passwordConfirm"
+          type="password"
+          minLength={8}
+          autoComplete="new-password"
+          className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
       </div>
 
       {state && !state.ok && state.error && (

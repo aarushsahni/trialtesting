@@ -21,7 +21,7 @@ export function AppHeader({ name, role }: Props) {
           </div>
           <div>
             <div className="text-sm font-semibold text-slate-900 leading-tight group-hover:text-blue-700 transition">
-              Trial Extraction · Qualification
+              Trial Annotation
             </div>
             <div className="text-xs text-slate-500 leading-tight">
               {name} · <span className="capitalize">{role}</span>
@@ -33,13 +33,19 @@ export function AppHeader({ name, role }: Props) {
             href={dashboardHref}
             className="text-xs px-2.5 py-1 rounded border border-slate-300 text-slate-700 hover:border-blue-400 hover:text-blue-700 transition whitespace-nowrap"
           >
-            ← Trial dashboard
+            ← Dashboard
           </Link>
           <Link
             href="/guide"
             className="text-xs text-slate-500 hover:text-slate-900 hover:underline"
           >
             Annotation guide
+          </Link>
+          <Link
+            href="/videos"
+            className="text-xs text-slate-500 hover:text-slate-900 hover:underline"
+          >
+            Example videos
           </Link>
           <Link
             href="/account"
