@@ -22,7 +22,8 @@
     "remove-test-users": "tsx scripts/remove-test-users.ts",
     "remove-user-by-name": "tsx scripts/remove-user-by-name.ts",
     "migrate-trial-test-flag": "tsx scripts/migrate-trial-test-flag.ts",
-    "migrate-password-column": "tsx scripts/migrate-password-column.ts"
+    "migrate-password-column": "tsx scripts/migrate-password-column.ts",
+    "migrate-add-highlights": "tsx scripts/migrate-add-highlights.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

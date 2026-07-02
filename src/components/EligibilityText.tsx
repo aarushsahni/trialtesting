@@ -1,59 +1,89 @@
-// Render CT.gov eligibility free-text as readable HTML.
-// Handles their conventions:
+'use client';
+
+// Render CT.gov eligibility free-text as readable HTML, overlaying the
+// annotator's saved highlights as <mark> spans.
+//
+// Parser handles CT.gov conventions:
 //   - ALL-CAPS lines ending with ":" → section headers
 //   - "*" or "-" prefix → bullets (indentation preserved)
 //   - blank lines → paragraph breaks
+//
+// Every text-carrying segment carries its raw source offset so a saved
+// highlight range (in raw offsets into the original eligibility_raw string)
+// can be split into contiguous pieces and each piece rendered inside a
+// data-source-field/data-source-start-tagged element for round-tripping
+// selections back to raw offsets.
 
-type B =
-  | { kind: 'header'; text: string }
-  | { kind: 'list'; items: { text: string; indent: number }[] }
-  | { kind: 'para'; text: string };
+import { Fragment } from 'react';
+import { Highlight, splitSegment } from '@/lib/highlights';
 
-// CT.gov text often contains markdown-escape characters like "\[" / "\<".
-// Strip them so they render as the intended literal character.
-function cleanText(s: string): string {
-  return s.replace(/\\([\[\]<>*_~`\\])/g, '$1');
+type ESegment = { text: string; rawStart: number };
+type EBlock =
+  | { kind: 'header'; segment: ESegment }
+  | { kind: 'para'; segments: ESegment[] }
+  | { kind: 'list'; items: { segment: ESegment; indent: number }[] };
+
+function parseLines(raw: string): { text: string; startInRaw: number }[] {
+  const lines: { text: string; startInRaw: number }[] = [];
+  let cursor = 0;
+  while (cursor <= raw.length) {
+    const nl = raw.indexOf('\n', cursor);
+    const end = nl === -1 ? raw.length : nl;
+    let text = raw.slice(cursor, end);
+    if (text.endsWith('\r')) text = text.slice(0, -1);
+    lines.push({ text, startInRaw: cursor });
+    if (nl === -1) break;
+    cursor = nl + 1;
+  }
+  return lines;
 }
 
-function parse(raw: string): B[] {
-  const lines = cleanText(raw).split(/\r?\n/);
-  const blocks: B[] = [];
-  let buffer: { text: string; indent: number }[] = [];
-  let para: string[] = [];
+function parse(raw: string): EBlock[] {
+  const blocks: EBlock[] = [];
+  const lines = parseLines(raw);
 
-  const flushList = () => {
-    if (buffer.length > 0) {
-      blocks.push({ kind: 'list', items: buffer });
-      buffer = [];
-    }
-  };
+  let paraSegments: ESegment[] = [];
+  let listItems: { segment: ESegment; indent: number }[] = [];
+
   const flushPara = () => {
-    if (para.length > 0) {
-      const text = para.join(' ').trim();
-      if (text) blocks.push({ kind: 'para', text });
-      para = [];
+    if (paraSegments.length > 0) {
+      blocks.push({ kind: 'para', segments: paraSegments });
+      paraSegments = [];
+    }
+  };
+  const flushList = () => {
+    if (listItems.length > 0) {
+      blocks.push({ kind: 'list', items: listItems });
+      listItems = [];
     }
   };
 
-  for (const rawLine of lines) {
-    const line = rawLine.replace(/\s+$/, '');
-    if (line.trim() === '') {
+  for (const { text: rawLine, startInRaw } of lines) {
+    const stripped = rawLine.replace(/\s+$/, '');
+    if (stripped.trim() === '') {
       flushList();
       flushPara();
       continue;
     }
-
-    // Bullet?
-    const bulletMatch = line.match(/^(\s*)[\*\-•]\s+(.*)$/);
+    const bulletMatch = stripped.match(/^(\s*)([\*\-•])(\s+)(.*)$/);
     if (bulletMatch) {
       flushPara();
-      const indent = Math.floor((bulletMatch[1].length || 0) / 2); // 2 spaces per indent level
-      buffer.push({ text: bulletMatch[2].trim(), indent });
+      const [, leading, , spaces, body] = bulletMatch;
+      const indent = Math.floor(leading.length / 2);
+      const bodyStartInLine = leading.length + 1 + spaces.length;
+      const leadingBodyWs = body.length - body.replace(/^\s+/, '').length;
+      const trailingBodyWs = body.length - body.replace(/\s+$/, '').length;
+      const trimmedBody = body.slice(leadingBodyWs, body.length - trailingBodyWs);
+      if (trimmedBody.length > 0) {
+        listItems.push({
+          segment: { text: trimmedBody, rawStart: startInRaw + bodyStartInLine + leadingBodyWs },
+          indent,
+        });
+      }
       continue;
     }
-
-    // Header — all-caps (allowing punctuation/spaces) ending in ":"
-    const trimmed = line.trim();
+    const trimmed = stripped.trim();
+    const leadingWs = stripped.length - stripped.replace(/^\s+/, '').length;
     if (
       trimmed.endsWith(':') &&
       trimmed.length <= 80 &&
@@ -61,48 +91,84 @@ function parse(raw: string): B[] {
     ) {
       flushList();
       flushPara();
-      blocks.push({ kind: 'header', text: trimmed.replace(/:$/, '') });
+      const headerText = trimmed.slice(0, -1);
+      blocks.push({
+        kind: 'header',
+        segment: { text: headerText, rawStart: startInRaw + leadingWs },
+      });
       continue;
     }
-
-    // Otherwise plain text — accumulate into a paragraph.
     flushList();
-    para.push(line.trim());
+    paraSegments.push({ text: trimmed, rawStart: startInRaw + leadingWs });
   }
   flushList();
   flushPara();
   return blocks;
 }
 
-// Turn inline "[8 weeks]" / "[12 courses]" CT.gov annotations into subtle pills
-// so they don't disrupt the prose.
-function renderInline(text: string): (string | React.ReactElement)[] {
-  const parts: (string | React.ReactElement)[] = [];
-  const re = /\[([^\[\]]{1,40})\]/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  let i = 0;
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) parts.push(text.slice(last, m.index));
-    parts.push(
-      <span
-        key={i++}
-        className="inline-block px-1.5 py-0.5 mx-0.5 bg-slate-100 text-slate-600 text-[11px] font-medium rounded align-baseline"
+// Between paragraph segments we emit a joining space so wrapped source lines
+// render as continuous prose. Anchor the space to the newline position in raw
+// so selections that end inside it round-trip; wrap in <mark> if the space
+// falls inside a saved highlight range.
+function JoinSpace({ rawPos, ranges }: { rawPos: number; ranges: Highlight[] }) {
+  const highlighted = ranges.some((r) => r.start <= rawPos && r.end > rawPos);
+  if (highlighted) {
+    return (
+      <mark
+        data-source-field="eligibilityRaw"
+        data-source-start={rawPos}
+        data-highlight-piece="true"
+        className="bg-yellow-200 text-inherit rounded-sm px-0.5"
       >
-        {m[1]}
-      </span>,
+        {' '}
+      </mark>
     );
-    last = m.index + m[0].length;
   }
-  if (last < text.length) parts.push(text.slice(last));
-  return parts.length > 0 ? parts : [text];
+  return (
+    <span data-source-field="eligibilityRaw" data-source-start={rawPos}>
+      {' '}
+    </span>
+  );
 }
 
-export function EligibilityText({ raw }: { raw: string }) {
+function Segment({ segment, ranges }: { segment: ESegment; ranges: Highlight[] }) {
+  const pieces = splitSegment(segment.rawStart, segment.text.length, ranges);
+  return (
+    <>
+      {pieces.map((p, i) => {
+        const relative = p.start - segment.rawStart;
+        const chunk = segment.text.slice(relative, relative + p.len);
+        if (p.highlighted) {
+          return (
+            <mark
+              key={i}
+              data-source-field="eligibilityRaw"
+              data-source-start={p.start}
+              data-highlight-piece="true"
+              className="bg-yellow-200 text-inherit rounded-sm px-0.5"
+            >
+              {chunk}
+            </mark>
+          );
+        }
+        return (
+          <Fragment key={i}>
+            <span data-source-field="eligibilityRaw" data-source-start={p.start}>
+              {chunk}
+            </span>
+          </Fragment>
+        );
+      })}
+    </>
+  );
+}
+
+export function EligibilityText({ raw, ranges }: { raw: string; ranges?: Highlight[] }) {
   if (!raw || !raw.trim()) {
     return <p className="text-sm text-slate-400 italic">No eligibility criteria provided.</p>;
   }
   const blocks = parse(raw);
+  const rs = ranges ?? [];
 
   return (
     <div className="space-y-3 text-sm text-slate-800 leading-relaxed bg-blue-50/40 border border-blue-100 rounded-xl p-5">
@@ -113,18 +179,24 @@ export function EligibilityText({ raw }: { raw: string }) {
               key={i}
               className="text-base font-bold text-blue-900 mt-6 first:mt-0 pb-2 border-b-2 border-blue-300"
             >
-              {b.text}
+              <Segment segment={b.segment} ranges={rs} />
             </h4>
           );
         }
         if (b.kind === 'para') {
           return (
             <p key={i} className="text-slate-800">
-              {renderInline(b.text)}
+              {b.segments.map((seg, j) => (
+                <Fragment key={j}>
+                  <Segment segment={seg} ranges={rs} />
+                  {j < b.segments.length - 1 && (
+                    <JoinSpace rawPos={seg.rawStart + seg.text.length} ranges={rs} />
+                  )}
+                </Fragment>
+              ))}
             </p>
           );
         }
-        // list — render with indentation as nested padding
         return (
           <ul key={i} className="space-y-1.5">
             {b.items.map((it, j) => (
@@ -136,7 +208,9 @@ export function EligibilityText({ raw }: { raw: string }) {
                 <span className="text-blue-500 select-none flex-shrink-0">
                   {it.indent === 0 ? '•' : '◦'}
                 </span>
-                <span className="text-slate-800">{renderInline(it.text)}</span>
+                <span className="text-slate-800">
+                  <Segment segment={it.segment} ranges={rs} />
+                </span>
               </li>
             ))}
           </ul>

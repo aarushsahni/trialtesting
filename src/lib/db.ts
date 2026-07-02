@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import type { TrialHighlights } from './highlights';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -117,6 +118,7 @@ export interface AnnotationRow {
   flags: Record<string, boolean>;
   status: AnnotationStatus;
   cohort_map: Record<string, string>;
+  highlights: TrialHighlights;
   score_data: Record<string, unknown> | null;
   scored_at: string | null;
   started_at: string;

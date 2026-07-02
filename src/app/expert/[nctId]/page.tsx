@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { readSession } from '@/lib/auth';
 import { query, AnnotationRow, TrialAssignmentRow, TrialRow } from '@/lib/db';
 import { TrialAnswers, emptyTrialAnswers } from '@/lib/types';
+import { TrialHighlights } from '@/lib/highlights';
 import { startOrResumeAnnotation } from '@/app/actions/annotation';
 import { getCurrentGuide } from '@/lib/guide-store';
 import { parseGuideHelpText } from '@/lib/guide-parser';
@@ -53,6 +54,8 @@ export default async function ExpertTrialPage({
   const guide = await getCurrentGuide();
   const helpTextMap = guide ? parseGuideHelpText(guide.markdown) : {};
 
+  const initialHighlights: TrialHighlights = (annotation.highlights ?? {}) as TrialHighlights;
+
   return (
     <AnnotationEditor
       session={{ name: session.name }}
@@ -79,6 +82,7 @@ export default async function ExpertTrialPage({
         notes: annotation.notes ?? '',
         flags: (annotation.flags ?? {}) as Record<string, boolean>,
       }}
+      initialHighlights={initialHighlights}
       helpTextMap={helpTextMap}
     />
   );
