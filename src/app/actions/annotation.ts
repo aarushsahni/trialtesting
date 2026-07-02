@@ -13,6 +13,7 @@ import {
   MAX_ANNOTATIONS_PER_TRIAL,
 } from '@/lib/db';
 import { TrialAnswers } from '@/lib/types';
+import { TrialHighlights } from '@/lib/highlights';
 import { scoreAnnotation } from '@/lib/scoring';
 
 export interface ActionResult {
@@ -142,6 +143,24 @@ export async function saveAnnotationMetaAction(opts: {
     WHERE nct_id = $3 AND expert_id = $4 AND status = 'in_progress'
     RETURNING id
   `, [opts.notes, JSON.stringify(opts.flags ?? {}), opts.nctId, session.userId]);
+  if (!rows[0]) return { ok: false, error: 'No editable annotation found.' };
+  return { ok: true };
+}
+
+export async function saveHighlightsAction(opts: {
+  nctId: string;
+  highlights: TrialHighlights;
+}): Promise<ActionResult> {
+  let session;
+  try { session = await requireSession('expert'); }
+  catch { return { ok: false, error: 'Not signed in as expert.' }; }
+
+  const rows = await query<{ id: string }>(`
+    UPDATE annotations
+    SET highlights = $1::jsonb, updated_at = NOW()
+    WHERE nct_id = $2 AND expert_id = $3 AND status = 'in_progress'
+    RETURNING id
+  `, [JSON.stringify(opts.highlights ?? {}), opts.nctId, session.userId]);
   if (!rows[0]) return { ok: false, error: 'No editable annotation found.' };
   return { ok: true };
 }

@@ -162,6 +162,7 @@ async function main() {
       status TEXT NOT NULL DEFAULT 'in_progress'
         CHECK (status IN ('in_progress', 'submitted')),
       cohort_map JSONB NOT NULL DEFAULT '{}'::jsonb,
+      highlights JSONB NOT NULL DEFAULT '{}'::jsonb,
       score_data JSONB,
       scored_at TIMESTAMPTZ,
       started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -173,8 +174,9 @@ async function main() {
   await pool.query(`CREATE INDEX IF NOT EXISTS annotations_expert_idx ON annotations(expert_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS annotations_nct_idx ON annotations(nct_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS annotations_status_idx ON annotations(status)`);
-  // Backfill: add cohort_map on existing DBs.
+  // Backfill: add cohort_map + highlights on existing DBs.
   await pool.query(`ALTER TABLE annotations ADD COLUMN IF NOT EXISTS cohort_map JSONB NOT NULL DEFAULT '{}'::jsonb`);
+  await pool.query(`ALTER TABLE annotations ADD COLUMN IF NOT EXISTS highlights JSONB NOT NULL DEFAULT '{}'::jsonb`);
 
   // Reviewer ground truth per trial (re-keyed to nct_id; no set scoping).
   await pool.query(`

@@ -11,6 +11,7 @@ import { logoutAction } from '@/app/actions/auth';
 import {
   saveAnnotationAction,
   saveAnnotationMetaAction,
+  saveHighlightsAction,
   submitAnnotationAction,
 } from '@/app/actions/annotation';
 import { RawTrialPanel } from '@/components/RawTrialPanel';
@@ -20,6 +21,7 @@ import { MarkCompleteToggle } from '@/components/MarkCompleteToggle';
 import { TrialMeta, TrialMetaValue } from '@/components/TrialMeta';
 import { HelpModal } from '@/components/HelpModal';
 import { Cohort, TrialAnswers } from '@/lib/types';
+import { TrialHighlights } from '@/lib/highlights';
 import { HelpTextMap } from '@/lib/guide-parser';
 
 interface Props {
@@ -44,12 +46,13 @@ interface Props {
   initialAnswers: TrialAnswers;
   initialSubmitted: boolean;
   initialMeta: TrialMetaValue;
+  initialHighlights: TrialHighlights;
   helpTextMap: HelpTextMap;
 }
 
 export function AnnotationEditor({
   session, isTestTrial, testReviewed, trial,
-  initialAnswers, initialSubmitted, initialMeta, helpTextMap,
+  initialAnswers, initialSubmitted, initialMeta, initialHighlights, helpTextMap,
 }: Props) {
   const router = useRouter();
   const [answers, setAnswers] = useState<TrialAnswers>(initialAnswers);
@@ -57,6 +60,7 @@ export function AnnotationEditor({
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [highlights, setHighlights] = useState<TrialHighlights>(initialHighlights);
 
   // Test trials become permanently read-only once the reviewer has marked
   // them reviewed; non-test trials can be reopened after submission.
@@ -67,6 +71,8 @@ export function AnnotationEditor({
   useEffect(() => { answersRef.current = answers; }, [answers]);
   const submittedRef = useRef(submitted);
   useEffect(() => { submittedRef.current = submitted; }, [submitted]);
+  const highlightsRef = useRef(highlights);
+  useEffect(() => { highlightsRef.current = highlights; }, [highlights]);
 
   const skipFirstRef = useRef(true);
   useEffect(() => {
@@ -76,6 +82,15 @@ export function AnnotationEditor({
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answers]);
+
+  const skipFirstHighlightsRef = useRef(true);
+  useEffect(() => {
+    if (skipFirstHighlightsRef.current) { skipFirstHighlightsRef.current = false; return; }
+    if (submittedRef.current) return;
+    const h = setTimeout(() => { void saveHighlights(); }, 250);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlights]);
 
   useEffect(() => {
     function flush() {
@@ -106,6 +121,20 @@ export function AnnotationEditor({
       setSaveError((e as Error).message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveHighlights() {
+    if (submittedRef.current) return;
+    try {
+      const r = await saveHighlightsAction({
+        nctId: trial.nctId,
+        highlights: highlightsRef.current,
+      });
+      if (!r.ok) throw new Error(r.error ?? 'Save failed');
+      setSavedAt(Date.now());
+    } catch (e) {
+      setSaveError((e as Error).message);
     }
   }
 
@@ -168,7 +197,12 @@ export function AnnotationEditor({
 
       <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-0 lg:gap-6 p-6">
         <div className="lg:sticky lg:top-[76px] lg:max-h-[calc(100vh-92px)] lg:overflow-y-auto">
-          <RawTrialPanel trial={trial} />
+          <RawTrialPanel
+            trial={trial}
+            highlights={highlights}
+            onChangeHighlights={setHighlights}
+            disabled={fieldsDisabled}
+          />
         </div>
 
         <div className="space-y-6 mt-6 lg:mt-0">

@@ -1,8 +1,27 @@
-// Render the raw CT.gov fields for one trial. Used by both the expert
-// annotation editor and the reviewer reference-key editor. Pure presentation —
-// no edit/save state.
+'use client';
 
+// Render the raw CT.gov fields for one trial. Used by both the expert
+// annotation editor (with highlight interactivity) and the reviewer
+// reference-key editor (plain read-only).
+//
+// When `highlights` and `onChangeHighlights` are both provided and
+// `disabled` is not set, the panel wires up text-selection tracking:
+// selecting text in briefTitle / briefSummary / detailedDescription /
+// eligibilityRaw pops a floating "Highlight" button; clicking an existing
+// <mark> pops "Remove highlight". Ranges are stored as raw character
+// offsets into each field's source string.
+
+import { useEffect, useRef, useState } from 'react';
 import { EligibilityText } from './EligibilityText';
+import { HighlightableText } from './HighlightableText';
+import { HighlightPopover } from './HighlightPopover';
+import {
+  Highlight,
+  HighlightableField,
+  TrialHighlights,
+  mergeRange,
+  subtractRange,
+} from '@/lib/highlights';
 
 export interface RawTrial {
   nctId: string;
@@ -20,15 +39,160 @@ export interface RawTrial {
   ctgovMaxAge: string | null;
 }
 
-export function RawTrialPanel({ trial }: { trial: RawTrial }) {
+interface Props {
+  trial: RawTrial;
+  highlights?: TrialHighlights | null;
+  onChangeHighlights?: (next: TrialHighlights) => void;
+  disabled?: boolean;
+}
+
+interface Pending {
+  mode: 'add' | 'remove';
+  field: HighlightableField;
+  range: Highlight;
+  rect: DOMRect;
+}
+
+// Walk from a Selection endpoint to the piece span that owns it and compute
+// the raw source offset. Piece spans always contain exactly one text node,
+// so text-node offsets map to raw offsets by simple addition.
+function resolveEndpoint(
+  node: Node,
+  offset: number,
+): { field: HighlightableField; sourceOffset: number } | null {
+  const el =
+    node.nodeType === Node.ELEMENT_NODE
+      ? (node as Element)
+      : node.parentElement;
+  if (!el) return null;
+  const anchor = el.closest('[data-source-field]') as HTMLElement | null;
+  if (!anchor) return null;
+  const field = anchor.dataset.sourceField as HighlightableField;
+  const start = Number(anchor.dataset.sourceStart || '0');
+  if (node.nodeType === Node.TEXT_NODE) {
+    return { field, sourceOffset: start + offset };
+  }
+  // Element-anchored selection — clamp to boundary of the piece's text.
+  const text = anchor.textContent ?? '';
+  return { field, sourceOffset: start + (offset >= 1 ? text.length : 0) };
+}
+
+export function RawTrialPanel({ trial, highlights, onChangeHighlights, disabled }: Props) {
+  const interactive = !!(highlights && onChangeHighlights && !disabled);
+  const rootRef = useRef<HTMLElement>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const highlightsRef = useRef(highlights);
+  useEffect(() => { highlightsRef.current = highlights; }, [highlights]);
+
+  useEffect(() => {
+    if (!interactive) { setPending(null); return; }
+
+    function onMouseUp(e: MouseEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-highlight-popover]')) return;
+
+      // Let the browser finalize the selection state before reading it.
+      setTimeout(() => {
+        const root = rootRef.current;
+        if (!root) return;
+        const sel = window.getSelection();
+
+        if (sel && sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed) {
+          const range = sel.getRangeAt(0);
+          if (
+            root.contains(range.startContainer) &&
+            root.contains(range.endContainer)
+          ) {
+            const startInfo = resolveEndpoint(range.startContainer, range.startOffset);
+            const endInfo = resolveEndpoint(range.endContainer, range.endOffset);
+            if (startInfo && endInfo && startInfo.field === endInfo.field) {
+              const a = Math.min(startInfo.sourceOffset, endInfo.sourceOffset);
+              const b = Math.max(startInfo.sourceOffset, endInfo.sourceOffset);
+              if (b > a) {
+                setPending({
+                  mode: 'add',
+                  field: startInfo.field,
+                  range: { start: a, end: b },
+                  rect: range.getBoundingClientRect(),
+                });
+                return;
+              }
+            }
+          }
+          setPending(null);
+          return;
+        }
+
+        // No selection — was this a click on an existing highlight?
+        const mark = target?.closest?.(
+          '[data-highlight-piece="true"]',
+        ) as HTMLElement | null;
+        if (mark) {
+          const field = mark.dataset.sourceField as HighlightableField;
+          const anchor = Number(mark.dataset.sourceStart || '0');
+          const list = (highlightsRef.current?.[field] ?? []) as Highlight[];
+          const owning = list.find((r) => r.start <= anchor && r.end > anchor);
+          if (owning) {
+            setPending({
+              mode: 'remove',
+              field,
+              range: owning,
+              rect: mark.getBoundingClientRect(),
+            });
+            return;
+          }
+        }
+        setPending(null);
+      }, 0);
+    }
+
+    document.addEventListener('mouseup', onMouseUp);
+    return () => document.removeEventListener('mouseup', onMouseUp);
+  }, [interactive]);
+
+  useEffect(() => {
+    if (!pending) return;
+    function onScroll() { setPending(null); }
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [pending]);
+
+  function apply() {
+    if (!pending || !onChangeHighlights) return;
+    const current = highlightsRef.current ?? {};
+    const prev = (current[pending.field] ?? []) as Highlight[];
+    const nextList =
+      pending.mode === 'add'
+        ? mergeRange(prev, pending.range)
+        : subtractRange(prev, pending.range);
+    const next: TrialHighlights = { ...current, [pending.field]: nextList };
+    onChangeHighlights(next);
+    setPending(null);
+    window.getSelection()?.removeAllRanges();
+  }
+
   const isPlaceholder = trial.nctId.startsWith('TRIAL-');
   const phaseStatusItems = [
     ...(trial.phases ?? []),
     ...(trial.overallStatus ? [trial.overallStatus] : []),
   ];
 
+  // Show marks whenever highlights are provided (interactive or read-only).
+  // Selection UI is separately gated on `interactive`.
+  const briefTitleRanges = highlights?.briefTitle ?? [];
+  const briefSummaryRanges = highlights?.briefSummary ?? [];
+  const detailedRanges = highlights?.detailedDescription ?? [];
+  const eligibilityRanges = highlights?.eligibilityRaw ?? [];
+
   return (
-    <section className="bg-white border border-slate-200 rounded-2xl shadow-sm shadow-blue-100/30 overflow-hidden">
+    <section
+      ref={rootRef}
+      className="bg-white border border-slate-200 rounded-2xl shadow-sm shadow-blue-100/30 overflow-hidden"
+    >
       <header className="px-6 py-3 border-b border-slate-100">
         <h2 className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
           Raw CT.gov data
@@ -51,7 +215,13 @@ export function RawTrialPanel({ trial }: { trial: RawTrial }) {
         </Block>
 
         <Block label="Brief title">
-          <p className="text-sm text-slate-900 leading-relaxed">{trial.briefTitle}</p>
+          <p className="text-sm text-slate-900 leading-relaxed">
+            <HighlightableText
+              source={trial.briefTitle}
+              field="briefTitle"
+              ranges={briefTitleRanges}
+            />
+          </p>
         </Block>
 
         {phaseStatusItems.length > 0 && (
@@ -86,7 +256,11 @@ export function RawTrialPanel({ trial }: { trial: RawTrial }) {
         {trial.briefSummary && (
           <Block label="Brief summary">
             <p className="text-sm text-slate-900 leading-relaxed whitespace-pre-line">
-              {trial.briefSummary}
+              <HighlightableText
+                source={trial.briefSummary}
+                field="briefSummary"
+                ranges={briefSummaryRanges}
+              />
             </p>
           </Block>
         )}
@@ -94,15 +268,23 @@ export function RawTrialPanel({ trial }: { trial: RawTrial }) {
         {trial.detailedDescription && (
           <Block label="Detailed description">
             <p className="text-sm text-slate-900 leading-relaxed whitespace-pre-line">
-              {trial.detailedDescription}
+              <HighlightableText
+                source={trial.detailedDescription}
+                field="detailedDescription"
+                ranges={detailedRanges}
+              />
             </p>
           </Block>
         )}
 
         <Block label="Eligibility criteria (raw)">
-          <EligibilityText raw={trial.eligibilityRaw || ''} />
+          <EligibilityText raw={trial.eligibilityRaw || ''} ranges={eligibilityRanges} />
         </Block>
       </div>
+
+      {pending && interactive && (
+        <HighlightPopover rect={pending.rect} mode={pending.mode} onApply={apply} />
+      )}
     </section>
   );
 }
