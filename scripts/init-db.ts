@@ -31,8 +31,21 @@ async function main() {
       name TEXT NOT NULL UNIQUE,
       role TEXT NOT NULL CHECK (role IN ('reviewer', 'expert')),
       password_hash TEXT NOT NULL,
+      annotator_slot INT CHECK (annotator_slot BETWEEN 1 AND 5),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+  // Existing DBs: add annotator_slot (nullable) and unique-among-non-null
+  // index so a slot is held by at most one expert at a time.
+  await pool.query(`
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS annotator_slot INT
+      CHECK (annotator_slot BETWEEN 1 AND 5)
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS users_annotator_slot_unique
+      ON users(annotator_slot)
+      WHERE annotator_slot IS NOT NULL
   `);
   // Existing DBs: rename dob_hash → password_hash. The existing bcrypt hashes
   // still validate against the user's old DOB string until they change it.
@@ -75,6 +88,8 @@ async function main() {
       schema_version_id UUID REFERENCES schema_versions(id),
       position INT NOT NULL DEFAULT 0,
       is_test_trial BOOLEAN NOT NULL DEFAULT FALSE,
+      annotator_slot_1 INT CHECK (annotator_slot_1 BETWEEN 1 AND 5),
+      annotator_slot_2 INT CHECK (annotator_slot_2 BETWEEN 1 AND 5),
       fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
@@ -83,6 +98,21 @@ async function main() {
   await pool.query(`ALTER TABLE trials DROP COLUMN IF EXISTS ai_answers`);
   // Add is_test_trial to existing DBs and backfill from prior assignment flags.
   await pool.query(`ALTER TABLE trials ADD COLUMN IF NOT EXISTS is_test_trial BOOLEAN NOT NULL DEFAULT FALSE`);
+  // Add annotator slot columns for existing DBs. Slots 1..5 tag which two
+  // annotator "seats" this trial belongs to; a trial is served to any expert
+  // whose users.annotator_slot matches either slot.
+  await pool.query(`
+    ALTER TABLE trials
+      ADD COLUMN IF NOT EXISTS annotator_slot_1 INT
+      CHECK (annotator_slot_1 BETWEEN 1 AND 5)
+  `);
+  await pool.query(`
+    ALTER TABLE trials
+      ADD COLUMN IF NOT EXISTS annotator_slot_2 INT
+      CHECK (annotator_slot_2 BETWEEN 1 AND 5)
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS trials_annotator_slot_1_idx ON trials(annotator_slot_1)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS trials_annotator_slot_2_idx ON trials(annotator_slot_2)`);
   await pool.query(`
     UPDATE trials t SET is_test_trial = TRUE
      WHERE NOT t.is_test_trial

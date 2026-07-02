@@ -76,7 +76,7 @@ export default async function ExpertsList() {
                           · Tests: <strong className="text-slate-700">{r.test_submitted}</strong> submitted /{' '}
                           <strong className="text-slate-700">{r.test_reviewed}</strong> reviewed / {r.total_test} total
                         </span>
-                        <span>· {r.nontest_submitted} other submissions</span>
+                        <span>· {r.nontest_submitted} main submissions</span>
                       </div>
                     </div>
                     <div className="flex-shrink-0 flex flex-col items-end gap-1">

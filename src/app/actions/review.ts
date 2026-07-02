@@ -1,7 +1,7 @@
 'use server';
 
 import { requireSession } from '@/lib/auth';
-import { query } from '@/lib/db';
+import { query, withTransaction } from '@/lib/db';
 import { TrialAnswers } from '@/lib/types';
 import { saveGuide } from '@/lib/guide-store';
 import { scoreAnnotation } from '@/lib/scoring';
@@ -213,4 +213,75 @@ export async function saveGuideAction(markdown: string): Promise<ActionResult> {
 
   await saveGuide(markdown, session.userId);
   return { ok: true };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Annotator slot assignment
+// ──────────────────────────────────────────────────────────────────────────
+//
+// Each main (non-test) trial carries annotator_slot_1 and annotator_slot_2
+// (integers 1..5), pre-assigned in the sampling script for balanced load.
+// Reviewers assign each expert a slot number, which triggers a bulk upsert
+// into trial_assignments for every non-test trial matching either slot.
+//
+// Slot uniqueness: at most one expert may hold a given slot at a time
+// (enforced by the users_annotator_slot_unique partial index). Setting slot
+// to null vacates but does NOT retract any existing assignments — an
+// in-flight annotation must never disappear on the expert.
+
+export async function setExpertAnnotatorSlotAction(opts: {
+  expertId: string;
+  slot: number | null;
+}): Promise<ActionResult & { assigned?: number }> {
+  try { await requireSession('reviewer'); }
+  catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
+
+  const { expertId, slot } = opts;
+  if (slot !== null && (!Number.isInteger(slot) || slot < 1 || slot > 5)) {
+    return { ok: false, error: 'Slot must be 1..5 or null.' };
+  }
+
+  try {
+    const assigned = await withTransaction(async (q) => {
+      // Verify target is an expert.
+      const u = await q<{ role: string }>(
+        `SELECT role FROM users WHERE id = $1 FOR UPDATE`,
+        [expertId],
+      );
+      if (u.length === 0) throw new Error('Expert not found.');
+      if (u[0].role !== 'expert') throw new Error('Target user is not an expert.');
+
+      if (slot !== null) {
+        // Slot uniqueness: reject if a different expert already holds it.
+        const conflict = await q<{ id: string }>(
+          `SELECT id FROM users WHERE annotator_slot = $1 AND id <> $2`,
+          [slot, expertId],
+        );
+        if (conflict.length > 0) {
+          throw new Error(`Slot ${slot} is already assigned to another expert.`);
+        }
+      }
+
+      await q(`UPDATE users SET annotator_slot = $1 WHERE id = $2`, [slot, expertId]);
+
+      if (slot === null) return 0;
+
+      // Upsert trial_assignments for every main trial tagged with this slot.
+      // ON CONFLICT DO NOTHING preserves any in-flight annotation state.
+      const ins = await q<{ nct_id: string }>(
+        `INSERT INTO trial_assignments (expert_id, nct_id, is_test_trial)
+           SELECT $1, t.nct_id, FALSE
+             FROM trials t
+            WHERE t.is_test_trial = FALSE
+              AND (t.annotator_slot_1 = $2 OR t.annotator_slot_2 = $2)
+         ON CONFLICT (expert_id, nct_id) DO NOTHING
+         RETURNING nct_id`,
+        [expertId, slot],
+      );
+      return ins.length;
+    });
+    return { ok: true, assigned };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
 }

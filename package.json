@@ -11,6 +11,7 @@
     "reset-db": "tsx scripts/reset-db.ts",
     "backup": "tsx scripts/backup-db.ts",
     "seed-from-csv": "tsx scripts/seed-from-csv.ts",
+    "seed-main-trials": "tsx scripts/seed-main-trials.ts",
     "seed-assignments": "tsx scripts/seed-assignments.ts",
     "seed-corpus-20": "tsx scripts/seed-corpus-20.ts",
     "replace-test-trials": "tsx scripts/replace-test-trials.ts",

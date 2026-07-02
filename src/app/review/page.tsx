@@ -13,6 +13,8 @@ interface Stats {
   expert_count: number;
   pending_test_reviews: number;
   trials_ready_to_adjudicate: number;
+  main_trial_count: number;
+  slots_assigned: number;
 }
 
 export default async function ReviewHub() {
@@ -42,7 +44,9 @@ export default async function ReviewHub() {
         WHERE a.status = 'submitted' AND ta.is_test_trial = FALSE
         GROUP BY a.nct_id
         HAVING COUNT(*) >= ${MAX_ANNOTATIONS_PER_TRIAL}
-      ) d)::int AS trials_ready_to_adjudicate
+      ) d)::int AS trials_ready_to_adjudicate,
+      (SELECT COUNT(*) FROM trials WHERE is_test_trial = FALSE)::int AS main_trial_count,
+      (SELECT COUNT(*) FROM users WHERE role = 'expert' AND annotator_slot IS NOT NULL)::int AS slots_assigned
   `);
   const s = rows[0];
 
@@ -75,6 +79,17 @@ export default async function ReviewHub() {
                 : `${s.expert_count} expert${s.expert_count === 1 ? '' : 's'}`
             }
             accent={s.pending_test_reviews > 0 ? 'text-amber-700' : 'text-slate-700'}
+          />
+          <Card
+            href="/review/annotators"
+            title="Annotator slots"
+            description="Assign each expert an annotator slot (1–5) to auto-queue their main trials."
+            stat={
+              s.main_trial_count === 0
+                ? 'No main trials seeded yet'
+                : `${s.slots_assigned} / 5 slots assigned · ${s.main_trial_count} main trials`
+            }
+            accent={s.slots_assigned < 5 && s.main_trial_count > 0 ? 'text-amber-700' : 'text-slate-700'}
           />
           <Card
             href="/review/adjudicate"

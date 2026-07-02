@@ -76,7 +76,7 @@ export default async function ExpertDashboard() {
             <p className="text-sm text-slate-700 mt-1">
               <strong>{submittedTests}</strong> / {tests.length} submitted ·{' '}
               <strong>{reviewedTests}</strong> / {tests.length} reviewed
-              {!unlocked && <span className="ml-2 text-amber-700">· Other trials lock until all test trials are reviewed</span>}
+              {!unlocked && <span className="ml-2 text-amber-700">· Main trials lock until all test trials are reviewed</span>}
             </p>
           </div>
         )}
@@ -91,11 +91,11 @@ export default async function ExpertDashboard() {
 
         <Section title={
           tests.length > 0
-            ? `Other trials (${nonTests.length}) · ${submittedNonTests} submitted`
+            ? `Main trials (${nonTests.length}) · ${submittedNonTests} submitted`
             : `Trials (${nonTests.length}) · ${submittedNonTests} submitted`
         }>
           {nonTests.length === 0 ? (
-            <div className="p-5 text-sm text-slate-500">No other trials assigned yet.</div>
+            <div className="p-5 text-sm text-slate-500">No main trials assigned yet.</div>
           ) : (
             nonTests.map((t) => (
               <TrialRow key={t.nct_id} t={t} clickable={unlocked} />
