@@ -234,7 +234,6 @@
       schemas: null,
       alreadyLabeled: false,
       saveStatus: 'idle',
-      labelerNote: '',
       cohorts: [],
       nextCohortIndex: 1,
     };
@@ -332,12 +331,10 @@
     function resetBlankState() {
       state.cohorts = [];
       state.nextCohortIndex = 1;
-      state.labelerNote = '';
     }
 
     function hydrateFromLabel(label) {
       const se = label.structuredEligibility || {};
-      state.labelerNote = label.labelerNote || '';
       const labelCohorts = Array.isArray(se.cohorts) ? se.cohorts : [];
       state.cohorts = labelCohorts.map((c) => ({
         cohortKey: c.cohortKey,
@@ -378,11 +375,6 @@
     function renderEditor() {
       if (!state.schemas) { editorEl.innerHTML = '<p class="empty">Schemas not loaded.</p>'; return; }
       editorEl.innerHTML = `
-        <div class="field">
-          <div class="field-label">Labeler note (optional)</div>
-          <textarea id="labeler-note" rows="2" style="width:100%;" placeholder="e.g. uncertain about the second cohort's age cap">${escapeHtml(state.labelerNote)}</textarea>
-        </div>
-
         <div class="field">
           <div class="field-label">Cohorts (${state.cohorts.length})</div>
           ${state.cohorts.map((c, i) => renderCohortCard(c, i)).join('')}
@@ -505,7 +497,6 @@
     }
 
     function wireEditor() {
-      $('labeler-note').addEventListener('input', (e) => { state.labelerNote = e.target.value; markDirty(); });
       // Cohort edits
       editorEl.querySelectorAll('[data-cohort-key-edit]').forEach((inp) => {
         const oldKey = inp.dataset.cohortKeyEdit;
@@ -665,17 +656,19 @@
 
     // ----- Save -----
     // Only structural cohort labels are captured. Trial-level cancerTypes is
-    // the de-duped union of cohort applicableCancerTypes (in registry order);
-    // eligibilityScope is inferred from cohort count. Inclusion/exclusion
-    // criteria arrays are intentionally empty — this tool does not label
-    // individual criterion strings.
+    // the de-duped union of cohort applicableCancerTypes; both trial-level
+    // and per-cohort cancer-type arrays are sorted in registry order so the
+    // JSON is stable across labelers.
     function buildPayload() {
+      const registryOrder = state.schemas.cancerTypes.map((c) => c.key);
+      const sortByRegistry = (types) => {
+        const set = new Set(types);
+        return registryOrder.filter((k) => set.has(k));
+      };
       const cohorts = state.cohorts.map((c) => ({
         cohortKey: c.cohortKey,
         displayName: c.displayName,
-        applicableCancerTypes: c.applicableCancerTypes,
-        inclusionCriteria: [],
-        exclusionCriteria: [],
+        applicableCancerTypes: sortByRegistry(c.applicableCancerTypes),
         minAge: c.minAge,
         maxAge: c.maxAge,
         ecogMin: c.ecogMin,
@@ -687,23 +680,17 @@
       for (const c of state.cohorts) {
         cohortDescriptors[c.cohortKey] = c.descriptors || {};
       }
-      const registryOrder = state.schemas.cancerTypes.map((c) => c.key);
       const cancerTypeSet = new Set();
       for (const c of state.cohorts) for (const k of c.applicableCancerTypes) cancerTypeSet.add(k);
       const cancerTypes = registryOrder.filter((k) => cancerTypeSet.has(k));
-      const eligibilityScope = state.cohorts.length > 1 ? 'MULTI_COHORT' : 'SINGLE_CANCER';
       const structuredEligibility = {
         cancerTypes,
-        eligibilityScope,
-        inclusionCriteria: [],
-        exclusionCriteria: [],
         cohorts,
       };
       return {
         schemaVersion: 1,
         nctId: state.nctId,
         labeledAt: new Date().toISOString(),
-        labelerNote: state.labelerNote || '',
         structuredEligibility,
         cohortDescriptors,
       };
