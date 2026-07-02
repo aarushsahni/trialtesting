@@ -136,6 +136,7 @@ function NumberInput({
         const n = Number(s);
         onChange(isNaN(n) ? null : n);
       }}
+      onWheel={(e) => e.currentTarget.blur()}
       className="w-32 px-2 py-1.5 text-sm border border-slate-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
     />
   );
