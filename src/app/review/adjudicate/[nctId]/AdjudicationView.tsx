@@ -12,11 +12,10 @@ import { adjudicateFieldAction, clearAdjudicationAction } from '@/app/actions/ad
 import { EligibilityText } from '@/components/EligibilityText';
 import { FieldEditor } from '@/components/FieldEditor';
 import { Tooltip } from '@/components/Tooltip';
-import { BLOCKS } from '@/lib/schema/field-schemas';
 import {
-  ALL_CANCER_TYPES, CANCER_TYPE_DEFINITIONS, CancerType, Cohort, FieldDef,
-  FieldValue, TRIAL_LEVEL_SENTINEL, TrialAnswers,
-} from '@/lib/types';
+  ComparisonRow as Row, adjudicationKey as makeKey, buildComparisonRows,
+} from '@/lib/adjudication-rows';
+import { FieldValue, TRIAL_LEVEL_SENTINEL, TrialAnswers } from '@/lib/types';
 
 interface ReviewSummary {
   expertName: string;
@@ -40,52 +39,6 @@ interface Props {
   initialAdjudications: Record<string, unknown>;
 }
 
-const TRIAL_LEVEL_DEFS: Record<string, FieldDef> = {
-  cancerTypes: { kind: 'multi', label: 'Cancer types', options: ALL_CANCER_TYPES, optionHelp: CANCER_TYPE_DEFINITIONS, class: 'other' },
-  minAge:      { kind: 'number', label: 'Min age',  class: 'other' },
-  maxAge:      { kind: 'number', label: 'Max age',  class: 'other' },
-  ecogMin:     { kind: 'number', label: 'ECOG min', class: 'other' },
-  ecogMax:     { kind: 'number', label: 'ECOG max', class: 'other' },
-};
-const COHORT_LEVEL_DEFS: Record<string, FieldDef> = {
-  minAge:      { kind: 'number', label: 'Min age (cohort)',  class: 'other' },
-  maxAge:      { kind: 'number', label: 'Max age (cohort)',  class: 'other' },
-  ecogMin:     { kind: 'number', label: 'ECOG min (cohort)', class: 'other' },
-  ecogMax:     { kind: 'number', label: 'ECOG max (cohort)', class: 'other' },
-};
-const COHORT_EXISTS_FIELD = '__cohort_exists__';
-
-function norm(v: unknown): string {
-  if (v === undefined || v === null) return 'null';
-  if (Array.isArray(v)) {
-    if (v.length === 0) return 'null';
-    return JSON.stringify([...v].sort());
-  }
-  return JSON.stringify(v);
-}
-
-function makeKey(cohortKey: string, cancerType: string, fieldKey: string): string {
-  return `${cohortKey}|${cancerType}|${fieldKey}`;
-}
-
-function getTrialLevel(ta: TrialAnswers | undefined, fieldKey: string): FieldValue {
-  if (!ta) return null;
-  const v = (ta as unknown as Record<string, FieldValue>)[fieldKey];
-  return v === undefined ? null : v;
-}
-function getCohortLevel(c: Cohort | undefined, fieldKey: string): FieldValue {
-  if (!c) return null;
-  const v = (c as unknown as Record<string, FieldValue>)[fieldKey];
-  return v === undefined ? null : v;
-}
-function getDescriptor(c: Cohort | undefined, ct: CancerType, fieldKey: string): FieldValue {
-  if (!c) return null;
-  const block = c.applicableCancerTypes?.[ct];
-  if (!block) return null;
-  const v = block[fieldKey];
-  return v === undefined ? null : v;
-}
-
 function ValueChip({ value, optionHelp }: { value: FieldValue; optionHelp?: Record<string, string> }) {
   if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) {
     return <span className="text-slate-400 italic">null</span>;
@@ -107,18 +60,6 @@ function ValueChip({ value, optionHelp }: { value: FieldValue; optionHelp?: Reco
   return <span className="font-semibold text-slate-900">{String(value)}</span>;
 }
 
-interface Row {
-  cohortKey: string;
-  cancerType: string;
-  scope: 'trial' | 'cohort' | 'descriptor' | 'cohort_existence';
-  cohortDisplayName?: string;
-  fieldKey: string;
-  def: FieldDef;
-  a: FieldValue;
-  b: FieldValue;
-  agree: boolean;
-}
-
 export function AdjudicationView({
   sessionName, trial, reviews, initialAdjudications,
 }: Props) {
@@ -128,75 +69,10 @@ export function AdjudicationView({
   const [err, setErr] = useState<string | null>(null);
   const bothSubmitted = reviews.length === 2 && reviews.every((r) => r.status === 'submitted');
 
-  const rows = useMemo<Row[]>(() => {
-    const out: Row[] = [];
-    const a = reviews[0];
-    const b = reviews[1];
-
-    for (const [fk, def] of Object.entries(TRIAL_LEVEL_DEFS)) {
-      const av = getTrialLevel(a?.answers, fk);
-      const bv = getTrialLevel(b?.answers, fk);
-      const agree = reviews.length === 2 ? norm(av) === norm(bv) : false;
-      out.push({
-        cohortKey: TRIAL_LEVEL_SENTINEL, cancerType: TRIAL_LEVEL_SENTINEL,
-        scope: 'trial', fieldKey: fk, def, a: av, b: bv, agree,
-      });
-    }
-
-    const cohortMap = new Map<string, { a?: Cohort; b?: Cohort }>();
-    for (const c of a?.answers.cohorts ?? []) {
-      cohortMap.set(c.cohortKey, { ...cohortMap.get(c.cohortKey), a: c });
-    }
-    for (const c of b?.answers.cohorts ?? []) {
-      cohortMap.set(c.cohortKey, { ...cohortMap.get(c.cohortKey), b: c });
-    }
-
-    for (const [cohortKey, sources] of cohortMap) {
-      const cohortDisplayName =
-        sources.a?.displayName ?? sources.b?.displayName ?? cohortKey;
-
-      const existDef: FieldDef = { kind: 'bool', label: 'Cohort belongs on final label', class: 'other' };
-      out.push({
-        cohortKey, cancerType: TRIAL_LEVEL_SENTINEL, scope: 'cohort_existence',
-        cohortDisplayName, fieldKey: COHORT_EXISTS_FIELD, def: existDef,
-        a: a ? (sources.a ? true : false) : null,
-        b: b ? (sources.b ? true : false) : null,
-        agree: reviews.length === 2 ? (!!sources.a === !!sources.b) : false,
-      });
-
-      for (const [fk, def] of Object.entries(COHORT_LEVEL_DEFS)) {
-        const av = getCohortLevel(sources.a, fk);
-        const bv = getCohortLevel(sources.b, fk);
-        out.push({
-          cohortKey, cancerType: TRIAL_LEVEL_SENTINEL, scope: 'cohort',
-          cohortDisplayName, fieldKey: fk, def,
-          a: av, b: bv,
-          agree: reviews.length === 2 ? norm(av) === norm(bv) : false,
-        });
-      }
-
-      const ctSet = new Set<CancerType>([
-        ...Object.keys(sources.a?.applicableCancerTypes ?? {}),
-        ...Object.keys(sources.b?.applicableCancerTypes ?? {}),
-      ] as CancerType[]);
-
-      for (const ct of ctSet) {
-        const block = BLOCKS[ct];
-        if (!block) continue;
-        for (const [fk, def] of Object.entries(block.fields)) {
-          const av = getDescriptor(sources.a, ct, fk);
-          const bv = getDescriptor(sources.b, ct, fk);
-          out.push({
-            cohortKey, cancerType: ct, scope: 'descriptor',
-            cohortDisplayName, fieldKey: fk, def,
-            a: av, b: bv,
-            agree: reviews.length === 2 ? norm(av) === norm(bv) : false,
-          });
-        }
-      }
-    }
-    return out;
-  }, [reviews]);
+  const rows = useMemo<Row[]>(
+    () => buildComparisonRows(reviews[0]?.answers, reviews[1]?.answers),
+    [reviews],
+  );
 
   const disagreements = rows.filter((r) => reviews.length === 2 && !r.agree);
   const resolved = disagreements.filter((r) => makeKey(r.cohortKey, r.cancerType, r.fieldKey) in finals).length;

@@ -109,6 +109,13 @@ export default async function ReviewHub() {
             stat=""
             accent="text-slate-700"
           />
+          <Card
+            href="/review/export"
+            title="Export"
+            description="Download main-corpus labels from annotator 1, annotator 2, or adjudicated."
+            stat={s.main_trial_count > 0 ? `${s.main_trial_count} main trials` : ''}
+            accent="text-slate-700"
+          />
         </div>
       </main>
     </div>
