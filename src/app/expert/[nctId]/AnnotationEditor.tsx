@@ -146,7 +146,7 @@ export function AnnotationEditor({
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {!submitted && <HelpModal storageKey="expert-help-v1" />}
+      {!submitted && <HelpModal storageKey="expert-help-v2" />}
       <header className="sticky top-0 z-20 bg-white border-b border-slate-200">
         <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center gap-4">
           <button onClick={() => saveAndGo('/expert')} className="text-sm text-blue-600 hover:underline whitespace-nowrap">

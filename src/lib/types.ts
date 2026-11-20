@@ -97,7 +97,7 @@ export const CANCER_TYPE_DEFINITIONS: Record<CancerType, string> = {
   MATURE_T_NK_CELL: 'Mature T- and NK-cell neoplasms — PTCL-NOS, AITL, ALCL, cutaneous T-cell lymphoma (mycosis fungoides, Sézary), NK/T-cell, HSTCL, ATL.',
   MYELOID_NEOPLASM: 'Myeloid neoplasms — AML, MDS, MDS/MPN overlap, MPN (PV, ET, MF), CMML, CML.',
   PRECURSOR_LYMPHOID: 'B-cell or T-cell acute lymphoblastic leukemia / lymphoma.',
-  PLASMA_CELL: 'Plasma cell neoplasms such as multiple myeloma, plasma cell leukemia, plasmacytoma, AL amyloidosis, Waldenström, POEMS.',
+  PLASMA_CELL: 'Plasma cell neoplasms such as multiple myeloma, plasma cell leukemia, plasmacytoma, AL amyloidosis, POEMS (Waldenström only when enrolled together with these; otherwise Mature B-cell).',
   OTHER: 'Basket catch-all for cancer types not covered by a named block.',
 };
 

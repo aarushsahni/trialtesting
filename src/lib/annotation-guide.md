@@ -1,18 +1,12 @@
 # TEMPO — Physician Annotation Guide
 
-**Purpose.** This guide is for trained physician reviewers performing **manual structured extraction** of trial eligibility criteria from ClinicalTrials.gov, to serve as the reference standard against which TEMPO's automated extraction is compared.
-
-**Scope.** One section per cancer type. For each trial, annotate only the cancer-type block(s) the trial is eligible for. A trial may be eligible for more than one cancer type (e.g., a basket trial) — annotate each applicable block independently.
-
----
-
 ## General annotation rules
 
 These rules apply to **every** field unless a field-specific note overrides them.
 
 1. **Source of truth.** Annotate from the ClinicalTrials.gov record: the *Eligibility Criteria* section primarily, supplemented by *Conditions*, *Brief Summary*, *Detailed Description*, *Arms/Interventions*, and *Official Title* where the criteria are ambiguous. Do not infer from external knowledge of the drug or sponsor beyond what is needed to interpret the trial's own language.
 
-2. **`null` means the trial does not constrain the field.** If the eligibility criteria neither require nor exclude any value of a field, leave it `null` (record as blank / NA on the annotation form). `null` is **not** "unknown to the reviewer" — it is an affirmative judgment that the trial places no constraint on this variable.
+2. **`null` means the trial does not constrain the field.** If the eligibility criteria neither require nor exclude any value of a field, leave it `null` (record as blank / NA on the annotation form).
 
 3. **Categorical fields are multi-select.** Record **every** value the trial would accept, not just the most prominent. If a trial enrolls both locally advanced and metastatic disease, record both `LOCALLY_ADVANCED` and `METASTATIC`. If the trial accepts essentially all values of the field (no constraint), record `null`, not the full list.
 
@@ -20,15 +14,13 @@ These rules apply to **every** field unless a field-specific note overrides them
 
 5. **Booleans encode a trial requirement, not patient status.** `true` = the trial *requires* the condition to be present. `false` = the trial *requires* it to be absent (an explicit exclusion). `null` = the trial does not mention it. Example: an exclusion of active brain metastases -> categorical `cnsMetastases` = ABSENT and TREATED_STABLE (active excluded); a boolean like `leptomeningealDisease` with LMD excluded -> `false`.
 
-6. **Numeric fields capture the trial's stated threshold.** `minPriorSystemicLines = 2` means the trial requires at least 2 prior lines. `maxPriorSystemicLines = 1` means no more than 1 prior line. If the trial says "treatment-naive," set `maxPriorSystemicLines = 0`. If only one bound is stated, leave the other `null`.
+6. **Numeric fields capture the trial's stated threshold.** `minPriorSystemicLines = 2` means the trial requires at least 2 prior lines. `maxPriorSystemicLines = 1` means no more than 1 prior line. If the trial says "treatment-naive," set `maxPriorSystemicLines = 0`. If only one bound is stated, leave the other `null` — this applies to age and ECOG too ("ECOG ≤1" → `ecogMax = 1`, `ecogMin` stays `null`). Count prior lines as follows unless the trial defines them differently. A line is a planned course of treatment. Induction, consolidation, transplant and maintenance given as one plan count as one line; a new line starts at relapse or progression, or when therapy changes because the disease isn't responding. For solid tumors, count lines given for advanced, metastatic or recurrent disease; adjuvant or neoadjuvant therapy counts only if the trial says so. Prostate: count cytotoxic and targeted regimens in the metastatic setting, not ADT alone.
 
-7. **Prior therapy: required vs. excluded.** `priorTherapyRequired` lists therapies a patient *must have received* to be eligible. `priorTherapyExcluded` lists therapies that *disqualify* a patient if previously received. A therapy mentioned in neither array is unconstrained. A single therapy must not appear in both arrays for the same trial — if the criteria appear to both require and exclude the same therapy, flag the trial for adjudication rather than guessing.
+7. **Prior therapy: required vs. excluded.** `priorTherapyRequired` lists therapies a patient *must have received* to be eligible. `priorTherapyExcluded` lists therapies that *disqualify* a patient if previously received. A therapy mentioned in neither array is unconstrained.
 
-8. **Setting-qualified criteria.** When a criterion is qualified by treatment setting ("prior platinum **in the metastatic setting**"), the current schema cannot encode the setting qualifier. Annotate the therapy as required/excluded per the criterion and **flag the trial** in the adjudication notes so the loss of the setting qualifier is recorded.
+8. **Disagreement handling.** If the trial language is genuinely ambiguous after reviewing all sections, do not guess to match expected AI behavior. Record your best single interpretation and add a free-text adjudication note. Blinded single-expert adjudication resolves reviewer–AI disagreements; consistent reviewer notes are essential for that step.
 
-9. **Disagreement handling.** If the trial language is genuinely ambiguous after reviewing all sections, do not guess to match expected AI behavior. Record your best single interpretation and add a free-text adjudication note. Blinded single-expert adjudication resolves reviewer–AI disagreements; consistent reviewer notes are essential for that step.
-
-10. **Do not normalize toward the AI.** Reviewers must not view the AI extraction before completing their own. The comparison is only valid if manual extraction is independent.
+9. **Values implied by the trial's own definitions count as stated.** When the trial's language fixes a field by definition or by design, record it: glioblastoma is IDH wild-type WHO grade 4; mCRPC is castration-resistant; a factor the trial stratifies by (e.g. MGMT methylation) is recorded per the trial; a trial that excludes known drivers gets the wild-type/negative value. Do not go further than the trial's own words and the field definitions (option tooltips) support.
 
 ---
 
@@ -36,15 +28,18 @@ These rules apply to **every** field unless a field-specific note overrides them
 
 Each trial is annotated as a top-level object plus one or more **cohorts**. Trial-level fields describe what applies across the entire trial: the cancer type(s) the trial enrolls, the age range, and the ECOG range. Set these from the most general eligibility statements in the protocol (the "all patients" criteria).
 
-A cohort is a subgroup within the trial with its own descriptor values. Single-cancer trials usually have one cohort named `MAIN`. Basket and biomarker-stratified trials have multiple cohorts — one per arm. Each cohort lists which cancer types it accepts (`applicableCancerTypes`); for each accepted cancer type the labeler fills the per-cancer descriptor fields. A cohort can also override age and ECOG with cohort-specific tighter bounds. Cohort keys (`MAIN`, `BIOMARKER_POS`, `PEDIATRIC`, …) are UPPERCASE identifiers — pick a short canonical key per cohort; the display name is the human-readable label.
-
-When the reviewer builds the reference key for a trial, they decide the canonical cohort breakdown. Experts attempting that trial see those cohorts seeded with blank descriptor values — they fill them in. Experts can also add cohorts if they believe the reviewer missed one. Scoring compares cohorts by their `cohortKey` strings: a cohort in the reference but not in the expert (or vice versa) contributes false negatives / false positives field-by-field, exactly as a missed block did under the old schema.
+A cohort is a subgroup within the trial with its own descriptor values. Single-cancer trials usually have one cohort named `MAIN`. Basket and biomarker-stratified trials have multiple cohorts — one per arm. Each cohort lists which cancer types it accepts (`applicableCancerTypes`); for each accepted cancer type the labeler fills the per-cancer descriptor fields. A cohort can also override age and ECOG with cohort-specific tighter bounds.
 
 Use `OTHER` in `applicableCancerTypes` only for true basket catch-all cohorts that accept cancer types outside the 24 named blocks; `OTHER` carries no descriptor fields and contributes nothing to field-level scoring.
+
+**Basket trials.** An any-solid-tumor or biomarker-defined basket (e.g. KRAS G12C, HER2+, MSI-H, NTRK) lists all 19 solid cancer types plus `OTHER`; an any-malignancy basket also lists the 5 heme blocks. Remove any type the trial excludes (e.g. primary CNS tumors).
+
+**Cancer-type boundaries.** Follow the cancer-type definitions shown in the form: Head & Neck is squamous-cell carcinoma; Ovarian is epithelial ovarian, fallopian tube and primary peritoneal carcinoma; pancreatic acinar carcinoma and pancreatic neuroendocrine carcinoma go under Pancreatic with histology `OTHER` (well-differentiated pancreatic NETs go under Neuroendocrine); Waldenström macroglobulinemia / lymphoplasmacytic lymphoma goes under Mature B-cell with `WALDENSTROM`, including Waldenström-only trials (use Plasma Cell `WALDENSTROM_LPL` only when the trial enrolls Waldenström together with plasma cell disorders such as myeloma or AL amyloidosis). Use `OTHER` only for basket catch-alls, never for a cancer that fits a named block.
 
 ---
 
 ## Field-type quick reference
+
 
 | Type in schema | How to record | `null` when |
 |---|---|---|
@@ -213,8 +208,8 @@ Schema key: `lung` &nbsp;|&nbsp; Block: `"lung"`
 | `her2Status` | multi-select: `MUTATED`, `AMPLIFIED`, `WILD_TYPE` | HER2 status | List every value the trial accepts; `null` if unrestricted. |
 | `ntrkStatus` | multi-select: `FUSION`, `WILD_TYPE` | NTRK gene fusion status | List every value the trial accepts; `null` if unrestricted. |
 | `pdl1TpsCategory` | multi-select: `HIGH_GE_50`, `INTERMEDIATE_1_49`, `NEGATIVE_LT_1` | PD-L1 tumor proportion score band (Dako 22C3) | List every value the trial accepts; `null` if unrestricted. |
-| `priorTherapyRequired` | multi-select: `PLATINUM_CHEMOTHERAPY`, `IMMUNOTHERAPY`, `TARGETED_THERAPY`, `OSIMERTINIB` | Therapies trial requires patient to have received | List every value the trial accepts; `null` if unrestricted. |
-| `priorTherapyExcluded` | multi-select: `PLATINUM_CHEMOTHERAPY`, `IMMUNOTHERAPY`, `TARGETED_THERAPY`, `OSIMERTINIB` | Therapies trial excludes prior exposure to | List every value the trial accepts; `null` if unrestricted. |
+| `priorTherapyRequired` | multi-select: `PLATINUM_CHEMOTHERAPY`, `IMMUNOTHERAPY`, `TARGETED_THERAPY` | Therapies trial requires patient to have received | List every value the trial accepts; `null` if unrestricted. |
+| `priorTherapyExcluded` | multi-select: `PLATINUM_CHEMOTHERAPY`, `IMMUNOTHERAPY`, `TARGETED_THERAPY` | Therapies trial excludes prior exposure to | List every value the trial accepts; `null` if unrestricted. |
 | `minPriorSystemicLines` | number | Minimum prior lines of systemic therapy | Record the trial's stated numeric threshold; `null` if none stated. |
 | `maxPriorSystemicLines` | number | Maximum prior lines of systemic therapy allowed | Record the trial's stated numeric threshold; `null` if none stated. |
 
@@ -225,6 +220,7 @@ Schema key: `lung` &nbsp;|&nbsp; Block: `"lung"`
 - Driver alterations (`egfrStatus`, `alkStatus`, etc.): a trial requiring a specific driver -> that value only. A trial *excluding* known drivers (common in IO trials) -> record the wild-type/negative value and flag in notes.
 - `egfrStatus`: classical = exon 19 del / L858R. Exon 20 insertion is a distinct value. 'EGFR-mutant' unspecified -> list all mutant values.
 - `pdl1TpsCategory`: map the trial's cut-point to the bands. 'PD-L1 >=50%' -> `HIGH_GE_50`. '>=1%' -> `HIGH_GE_50` and `INTERMEDIATE_1_49`. No PD-L1 requirement -> `null`.
+- `priorTherapyRequired` / `priorTherapyExcluded`: osimertinib (and any other EGFR/ALK/ROS1/KRAS/MET/RET TKI) is recorded as `TARGETED_THERAPY`.
 
 ---
 
@@ -614,7 +610,7 @@ Schema key: `mature_b_cell` &nbsp;|&nbsp; Block: `"matureBCell"`
 
 **Annotation notes:**
 
-- `acceptedDiseases`: this is the primary scoping field. List every lymphoma subtype the trial enrolls. A DLBCL-only trial -> DLBCL_NOS (plus HGBCL/transformed variants only if explicitly included).
+- `acceptedDiseases`: this is the primary scoping field. List every lymphoma subtype the trial enrolls. A DLBCL-only trial -> DLBCL_NOS (plus HGBCL/transformed variants only if explicitly included). A Waldenström-only trial -> WALDENSTROM; record its MYD88, CD20 and prior anti-CD20 / BTK-inhibitor criteria in this block.
 - `cellOfOrigin`: GCB vs non-GCB/ABC (Hans algorithm or GEP). Populate only if the trial gates on COO.
 - `del17pOrTp53Mutated`: CLL high-risk marker; `true` if the trial requires it, `false` if excluded, `null` if not addressed.
 - CD-marker booleans (`cd19Positive`, etc.): `true` only if the trial requires antigen positivity (e.g., CD19+ for CAR-T / bispecific).
@@ -739,7 +735,7 @@ Schema key: `plasma_cell` &nbsp;|&nbsp; Block: `"plasmaCell"`
 
 **Annotation notes:**
 
-- `acceptedDiseases`: multiple myeloma vs AL amyloidosis vs plasmacytoma vs Waldenstrom — distinct. Scope the trial here.
+- `acceptedDiseases`: multiple myeloma vs AL amyloidosis vs plasmacytoma vs Waldenstrom — distinct. Scope the trial here. Tick `WALDENSTROM_LPL` only when the trial also enrolls a plasma cell disorder; a Waldenström-only trial goes under Mature B-cell (`WALDENSTROM`).
 - `highRiskCytogenetics`: `true` if the trial requires high-risk FISH (del17p, t(4;14), t(14;16), gain 1q); `false` if excluded.
 - `measurableDiseaseImwg`: myeloma trials require IMWG-measurable disease (serum/urine M-protein or involved FLC thresholds). `true` if required.
 - `amyloidCardiacInvolvement` / `amyloidMayoStage`: populate for AL amyloidosis trials only.
