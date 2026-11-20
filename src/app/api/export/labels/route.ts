@@ -84,6 +84,7 @@ function adjudicatedExport(trials: CorpusTrial[], format: string) {
           annotator2: t.annotator2?.expertName ?? null,
           status,
           unresolved: merged?.unresolved ?? [],
+          adjudicatorNote: t.adjudicatorNote,
           labels: merged?.answers ?? null,
         };
       }),

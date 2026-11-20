@@ -19,7 +19,7 @@
 
 import { query } from './db';
 import {
-  COHORT_MAP_FIELD, CohortMap, FieldSource, adjudicationKey, buildComparisonRows, resolveRows,
+  ADJUDICATION_NOTE_FIELD, COHORT_MAP_FIELD, CohortMap, FieldSource, adjudicationKey, buildComparisonRows, resolveRows,
 } from './adjudication-rows';
 import { FieldValue, TRIAL_LEVEL_SENTINEL, TrialAnswers } from './types';
 
@@ -42,6 +42,7 @@ export interface CorpusTrial {
   annotator2: CorpusAnnotation | null;
   adjudications: Map<string, { value: FieldValue; decidedBy: string | null; decidedAt: string }>;
   cohortMap: CohortMap | null;   // reviewer-saved cohort pairing, if any
+  adjudicatorNote: string | null; // reviewer's explanation of their decisions
 }
 
 interface TrialDbRow {
@@ -124,9 +125,14 @@ export async function loadCorpus(): Promise<CorpusTrial[]> {
   }
   const adjByTrial = new Map<string, CorpusTrial['adjudications']>();
   const mapByTrial = new Map<string, CohortMap>();
+  const noteByTrial = new Map<string, string>();
   for (const d of adjudications) {
     if (d.field_key === COHORT_MAP_FIELD && d.cohort_key === TRIAL_LEVEL_SENTINEL) {
       mapByTrial.set(d.nct_id, (d.final_value?.v ?? {}) as unknown as CohortMap);
+      continue;
+    }
+    if (d.field_key === ADJUDICATION_NOTE_FIELD && d.cohort_key === TRIAL_LEVEL_SENTINEL) {
+      noteByTrial.set(d.nct_id, String(d.final_value?.v ?? ''));
       continue;
     }
     const m = adjByTrial.get(d.nct_id) ?? new Map();
@@ -155,6 +161,7 @@ export async function loadCorpus(): Promise<CorpusTrial[]> {
       annotator2: toCorpus(second),
       adjudications: adjByTrial.get(t.nct_id) ?? new Map(),
       cohortMap: mapByTrial.get(t.nct_id) ?? null,
+      adjudicatorNote: noteByTrial.get(t.nct_id) ?? null,
     };
   });
 }

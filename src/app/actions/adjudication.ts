@@ -4,7 +4,7 @@
 
 import { requireSession } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { COHORT_MAP_FIELD, CohortMap } from '@/lib/adjudication-rows';
+import { ADJUDICATION_NOTE_FIELD, COHORT_MAP_FIELD, CohortMap } from '@/lib/adjudication-rows';
 import { CancerType, FieldValue, TRIAL_LEVEL_SENTINEL } from '@/lib/types';
 
 export interface ActionResult {
@@ -115,5 +115,31 @@ export async function setAdjudicationCohortMapAction(opts: {
           decided_by = EXCLUDED.decided_by,
           decided_at = NOW()
   `, [opts.nctId, TRIAL_LEVEL_SENTINEL, COHORT_MAP_FIELD, JSON.stringify({ v: opts.map }), session.userId]);
+  return { ok: true };
+}
+
+// Save the adjudicator's explanation of their decisions on a trial (one note
+// per trial, stored as a sentinel row). An empty note removes the row.
+export async function setAdjudicationNoteAction(opts: { nctId: string; note: string }): Promise<ActionResult> {
+  let session;
+  try { session = await requireSession('reviewer'); }
+  catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
+
+  const note = opts.note.trim().slice(0, 5000);
+  if (!note) {
+    await query(
+      `DELETE FROM trial_adjudications WHERE nct_id = $1 AND cohort_key = $2 AND cancer_type = $2 AND field_key = $3`,
+      [opts.nctId, TRIAL_LEVEL_SENTINEL, ADJUDICATION_NOTE_FIELD],
+    );
+    return { ok: true };
+  }
+  await query(`
+    INSERT INTO trial_adjudications (nct_id, cohort_key, cancer_type, field_key, final_value, decided_by, decided_at)
+    VALUES ($1, $2, $2, $3, $4::jsonb, $5, NOW())
+    ON CONFLICT (nct_id, cohort_key, cancer_type, field_key) DO UPDATE
+      SET final_value = EXCLUDED.final_value,
+          decided_by = EXCLUDED.decided_by,
+          decided_at = NOW()
+  `, [opts.nctId, TRIAL_LEVEL_SENTINEL, ADJUDICATION_NOTE_FIELD, JSON.stringify({ v: note }), session.userId]);
   return { ok: true };
 }

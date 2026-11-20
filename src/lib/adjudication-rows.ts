@@ -43,6 +43,8 @@ export const COHORT_EXISTS_FIELD = '__cohort_exists__';
 export const COHORT_TYPES_FIELD = '__cancer_types__';
 // Reviewer-saved cohort pairing, stored as one trial_adjudications row.
 export const COHORT_MAP_FIELD = '__cohort_map__';
+// The adjudicator's free-text explanation for the trial, stored the same way ({v: string}).
+export const ADJUDICATION_NOTE_FIELD = '__adjudication_note__';
 
 const COHORT_EXISTS_DEF: FieldDef = { kind: 'bool', label: 'Cohort belongs on final label', class: 'other' };
 const COHORT_TYPES_DEF: FieldDef = {

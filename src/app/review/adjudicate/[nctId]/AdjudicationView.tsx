@@ -1,34 +1,35 @@
 'use client';
 
 // Reviewer adjudication of one trial. Top to bottom:
-//   1. Cohorts — how the two annotators' cohorts are paired (re-pairable), and
-//      the structural decisions: keep a cohort only one annotator drew, and
-//      which cancer types each cohort covers.
-//   2. Open fields — the field-level decisions, grouped by cohort and cancer
-//      type, with quick picks, keyboard shortcuts and per-cohort bulk picks.
-//   3. Collapsed: differences resolved automatically (with the reason and an
-//      override), populated agreements, and the derived trial-level values.
+//   1. A comparison table: Field | Annotator A | Annotator B | Final label.
+//      Sections: the derived trial level, then each cohort pair (re-pairable
+//      from its header row) with its structural rows (keep the cohort, its
+//      cancer types), its bounds, and its fields grouped by cancer type. Open
+//      rows show quick picks; any other row can be clicked to change it.
+//   2. The adjudicator's note explaining their reasoning for the trial.
+//   3. Collapsed: each annotator's full annotation, cohorts side by side.
 //
 // What counts as a decision, and the final label, come from
 // buildComparisonRows / resolveRows (src/lib/adjudication-rows.ts) — the same
 // code the label export uses.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   adjudicateFieldAction, adjudicateFieldsAction, clearAdjudicationAction, setAdjudicationCohortMapAction,
+  setAdjudicationNoteAction,
 } from '@/app/actions/adjudication';
 import { EligibilityText } from '@/components/EligibilityText';
 import { FieldEditor } from '@/components/FieldEditor';
 import { Tooltip } from '@/components/Tooltip';
 import {
-  COHORT_EXISTS_FIELD, COHORT_TYPES_FIELD, CohortMap, CohortPair, ResolvedRow,
-  adjudicationKey, buildComparisonRows, cohortMapOf, pairsFor, resolveRows,
+  COHORT_EXISTS_FIELD, COHORT_TYPES_FIELD, CohortMap, CohortPair, ComparisonRow, ResolvedRow,
+  adjudicationKey, buildComparisonRows, cohortMapOf, normValue, pairsFor, resolveRows,
 } from '@/lib/adjudication-rows';
-import { FieldValue, TrialAnswers } from '@/lib/types';
+import { BLOCKS } from '@/lib/schema/field-schemas';
+import { ALL_CANCER_TYPES, CANCER_TYPE_LABELS, CANCER_TYPE_DEFINITIONS, Cohort, FieldValue, TrialAnswers } from '@/lib/types';
 
 interface ReviewSummary {
-  expertName: string;
   answers: TrialAnswers;
   notes: string;
   status: 'in_progress' | 'submitted';
@@ -48,6 +49,8 @@ interface Props {
   reviews: ReviewSummary[];
   initialAdjudications: Record<string, unknown>;
   initialCohortMap: CohortMap | null;
+  initialNote: string;
+  initialNoteSavedAt: string | null;
 }
 
 type Names = [string, string];
@@ -67,7 +70,7 @@ function isBlank(v: FieldValue | undefined) {
 
 interface QuickPick { id: string; label: string; shortcut: string; value: FieldValue }
 
-function quickPicks(row: ResolvedRow, names: Names): QuickPick[] {
+function quickPicks(row: ComparisonRow, names: Names): QuickPick[] {
   if (row.fieldKey === COHORT_EXISTS_FIELD) {
     const keepLabel = row.a ? `Keep (${names[0]})` : `Keep (${names[1]})`;
     return [
@@ -127,42 +130,63 @@ function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd className="ml-1.5 text-[10px] font-mono px-1 rounded border border-slate-300 bg-slate-50 text-slate-500">{children}</kbd>;
 }
 
-function scopeLabel(r: ResolvedRow) {
-  if (r.scope === 'trial') return 'trial level';
-  if (r.scope === 'cohort_existence') return 'cohort';
-  if (r.scope === 'cohort') return r.fieldKey === COHORT_TYPES_FIELD ? 'cohort' : 'cohort bound';
-  return r.cancerType;
+const STATUS_TONES = {
+  open: 'bg-red-100 text-red-700',
+  decided: 'bg-emerald-100 text-emerald-700',
+  agreed: 'bg-slate-100 text-slate-600',
+  auto: 'bg-blue-100 text-blue-700',
+  muted: 'bg-slate-100 text-slate-400',
+} as const;
+
+// The badge in the Final column: where the final value comes from.
+function statusOf(res: ResolvedRow | undefined, names: Names): { label: string; tone: keyof typeof STATUS_TONES } {
+  if (!res) return { label: 'Not on label', tone: 'muted' };
+  switch (res.source) {
+    case 'unresolved': return { label: 'Open', tone: 'open' };
+    case 'adjudicated': return { label: 'Decided', tone: 'decided' };
+    case 'derived': return { label: 'Derived', tone: 'auto' };
+    case 'single_annotator': return { label: 'Single annotator', tone: 'agreed' };
+    case 'one_sided': return { label: `Only ${res.oneSided === 'a' ? names[0] : names[1]}`, tone: 'auto' };
+    default:
+      if (res.autoReason === 'blank_rule') return { label: 'Same after blank rule', tone: 'auto' };
+      if (res.autoReason === 'inherited') return { label: 'Same with trial value', tone: 'auto' };
+      return { label: 'Agreed', tone: 'agreed' };
+  }
 }
 
-function autoReasonLabel(r: ResolvedRow, names: Names): string {
-  if (r.autoReason === 'blank_rule') return 'Blank rule';
-  if (r.autoReason === 'inherited') return 'Inherited from trial level';
-  if (r.oneSided) {
-    const who = r.oneSided === 'a' ? names[0] : names[1];
-    return r.scope === 'descriptor' && r.fieldKey !== COHORT_TYPES_FIELD ? `Only ${who} has this cancer type here` : `Only ${who} has this cohort`;
-  }
-  return '';
+function Badge({ label, tone }: { label: string; tone: keyof typeof STATUS_TONES }) {
+  return (
+    <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold whitespace-nowrap ${STATUS_TONES[tone]}`}>
+      {label}
+    </span>
+  );
 }
+
+const cohortLabel = (c?: { displayName: string; cohortKey: string }) => c ? (c.displayName?.trim() || c.cohortKey) : '';
+const cohortTypes = (c?: Cohort) => sortedTypes(Object.keys(c?.applicableCancerTypes ?? {}));
 
 // ──────────────────────────────────────────────────────────────────────────
 // Main view
 // ──────────────────────────────────────────────────────────────────────────
 
 export function AdjudicationView({
-  sessionName, trial, reviews, initialAdjudications, initialCohortMap,
+  sessionName, trial, reviews, initialAdjudications, initialCohortMap, initialNote, initialNoteSavedAt,
 }: Props) {
   const [finals, setFinals] = useState<Record<string, FieldValue>>(initialAdjudications as Record<string, FieldValue>);
   const [cohortMap, setCohortMap] = useState<CohortMap | null>(initialCohortMap);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const cardRefs = useRef(new Map<string, HTMLDivElement>());
+  const [hideBlank, setHideBlank] = useState(true);
+  const [hideAgreed, setHideAgreed] = useState(false);
+  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
 
   const A = reviews[0]?.answers;
   const B = reviews[1]?.answers;
   const hasBoth = reviews.length === 2;
   const bothSubmitted = hasBoth && reviews.every((r) => r.status === 'submitted');
-  const names: Names = [reviews[0]?.expertName ?? 'Annotator 1', reviews[1]?.expertName ?? 'Annotator 2'];
-  const short: Names = [names[0].split(' ')[0], names[1].split(' ')[0]];
+  // Blinded: annotators are shown only as A / B (see page.tsx).
+  const names: Names = ['Annotator A', 'Annotator B'];
+  const short: Names = ['A', 'B'];
 
   const pairs = useMemo(() => pairsFor(A, B, cohortMap), [A, B, cohortMap]);
   const rows = useMemo(() => buildComparisonRows(A, B, cohortMap), [A, B, cohortMap]);
@@ -170,23 +194,20 @@ export function AdjudicationView({
     () => resolveRows(rows, !!A, !!B, (k) => (k in finals ? finals[k] : undefined)),
     [rows, A, B, finals],
   );
+  const resolvedByKey = useMemo(() => new Map(resolved.rows.map((r) => [keyOf(r), r])), [resolved]);
 
-  // Decision rows in keyboard order: structural decisions first, then fields.
-  const decisionRows = useMemo(() => {
-    const live = resolved.rows.filter((r) => r.needsDecision);
-    return [...live.filter(isStructural), ...live.filter((r) => !isStructural(r))];
-  }, [resolved]);
+  // Decisions in table order (each cohort's structural rows come first).
+  const decisionRows = useMemo(() => resolved.rows.filter((r) => r.needsDecision), [resolved]);
   const openCount = resolved.unresolved.length;
   const decidedCount = decisionRows.length - openCount;
+  const autoCount = resolved.autoResolved.length;
 
-  const autoRows = useMemo(() => resolved.rows.filter((r) =>
-    (r.agree && (r.autoReason === 'blank_rule' || r.autoReason === 'inherited')) ||
-    (r.oneSided && (!isBlank(r.a) || !isBlank(r.b)) && !isStructural(r)),
-  ), [resolved]);
-  const agreements = useMemo(() => resolved.rows.filter((r) =>
-    r.scope !== 'trial' && r.agree && !r.autoReason && !isBlank(r.a),
-  ), [resolved]);
-  const trialRows = resolved.rows.filter((r) => r.scope === 'trial');
+  const trialRows = rows.filter((r) => r.scope === 'trial');
+  const rowsByPair = useMemo(() => {
+    const m = new Map<string, ComparisonRow[]>();
+    for (const r of rows) if (r.scope !== 'trial') m.set(r.cohortKey, [...(m.get(r.cohortKey) ?? []), r]);
+    return m;
+  }, [rows]);
 
   // Start on the first open decision.
   useEffect(() => {
@@ -194,7 +215,7 @@ export function AdjudicationView({
   }, [activeKey, resolved]);
 
   useEffect(() => {
-    if (activeKey) cardRefs.current.get(activeKey)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (activeKey) rowRefs.current.get(activeKey)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [activeKey]);
 
   function nextOpenAfter(key: string, skip: Set<string>): string | null {
@@ -204,7 +225,7 @@ export function AdjudicationView({
     return next ? keyOf(next) : null;
   }
 
-  async function decide(items: { row: ResolvedRow; value: FieldValue }[], advanceFrom?: string) {
+  async function decide(items: { row: ComparisonRow; value: FieldValue }[], advanceFrom?: string) {
     setErr(null);
     const prev = finals;
     const next = { ...finals };
@@ -223,7 +244,7 @@ export function AdjudicationView({
     if (!result.ok) { setFinals(prev); setErr(result.error ?? 'Failed to save'); }
   }
 
-  async function clear(row: ResolvedRow) {
+  async function clear(row: ComparisonRow) {
     setErr(null);
     const key = keyOf(row);
     const prev = finals;
@@ -259,7 +280,11 @@ export function AdjudicationView({
     void savePairing(map);
   }
 
-  // Keyboard: J/K move between decisions; 1/2/U/O/0 pick on the active card.
+  // A row can be decided when both annotations exist and the row is on the
+  // final label (not trial level, not in a dropped cohort or excluded type).
+  const canDecide = (r: ComparisonRow) => hasBoth && r.scope !== 'trial' && resolvedByKey.has(keyOf(r));
+
+  // Keyboard: J/K move between decisions; 1/2/U/O/0 pick on the active row.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const t = e.target as HTMLElement | null;
@@ -275,8 +300,8 @@ export function AdjudicationView({
         setActiveKey(keyOf(decisionRows[j]));
         return;
       }
-      const row = decisionRows.find((r) => keyOf(r) === activeKey);
-      if (!row) return;
+      const row = activeKey ? resolvedByKey.get(activeKey) : undefined;
+      if (!row || !canDecide(row)) return;
       const pick = quickPicks(row, short).find((p) => p.shortcut === k);
       if (!pick) return;
       e.preventDefault();
@@ -286,32 +311,138 @@ export function AdjudicationView({
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  const cardProps = (row: ResolvedRow): CardProps => {
-    const k = keyOf(row);
-    return {
-      row,
-      names: short,
-      final: finals[k],
-      isDecided: k in finals,
-      active: activeKey === k,
-      onActivate: () => setActiveKey(k),
-      onPick: (v: FieldValue) => decide([{ row, value: v }], k),
-      onClear: () => clear(row),
-      cardRef: (el: HTMLDivElement | null) => { if (el) cardRefs.current.set(k, el); else cardRefs.current.delete(k); },
-    };
+  // Toggles never hide an open decision or the row being worked on.
+  const isVisible = (r: ComparisonRow) => {
+    const k = keyOf(r);
+    const res = resolvedByKey.get(k);
+    if (res?.source === 'unresolved' || k === activeKey || k in finals) return true;
+    if (hideBlank && [r.a, r.b, r.rawA, r.rawB].every(isBlank)) return false;
+    if (hideAgreed && res?.source === 'agreed') return false;
+    return true;
   };
 
-  // Field decisions grouped by cohort, then cancer type.
-  const fieldGroups = useMemo(() => {
-    const groups = new Map<string, { name: string; rows: ResolvedRow[] }>();
-    for (const r of decisionRows) {
-      if (isStructural(r)) continue;
-      const g = groups.get(r.cohortKey) ?? { name: r.cohortDisplayName ?? r.cohortKey, rows: [] };
-      g.rows.push(r);
-      groups.set(r.cohortKey, g);
-    }
-    return groups;
-  }, [decisionRows]);
+  const renderRow = (r: ComparisonRow, label?: string) => {
+    const k = keyOf(r);
+    return (
+      <CompareRow
+        key={k}
+        row={r}
+        res={resolvedByKey.get(k)}
+        label={label ?? r.def.label}
+        names={short}
+        active={activeKey === k}
+        isDecided={k in finals}
+        canDecide={canDecide(r)}
+        onActivate={() => setActiveKey(k)}
+        onPick={(v) => decide([{ row: r, value: v }], k)}
+        onClear={() => clear(r)}
+        rowRef={(el) => { if (el) rowRefs.current.set(k, el); else rowRefs.current.delete(k); }}
+      />
+    );
+  };
+
+  const hdrCell = 'px-3 py-2 align-top border-t-2 border-slate-300 bg-slate-100';
+  const subCell = 'px-3 py-1.5 align-top border-t border-slate-200 bg-slate-50 text-xs';
+
+  const renderPair = (p: CohortPair, idx: number) => {
+    const pairRows = rowsByPair.get(p.key) ?? [];
+    const existsRow = pairRows.find((r) => r.fieldKey === COHORT_EXISTS_FIELD);
+    const typesRow = pairRows.find((r) => r.fieldKey === COHORT_TYPES_FIELD);
+    const boundRows = pairRows.filter((r) => r.scope === 'cohort' && r.fieldKey !== COHORT_TYPES_FIELD);
+    const dropped = existsRow ? resolvedByKey.get(keyOf(existsRow))?.value === false : false;
+    const open = pairRows.map((r) => resolvedByKey.get(keyOf(r))).filter((r): r is ResolvedRow => r?.source === 'unresolved');
+    const openFields = open.filter((r) => !isStructural(r));
+
+    // Final cancer types of this cohort; null while the membership decision is open.
+    const typesRes = typesRow ? resolvedByKey.get(keyOf(typesRow)) : undefined;
+    const finalTypes = typesRes && typesRes.source !== 'unresolved' ? new Set((typesRes.value as string[] | null) ?? []) : null;
+
+    const byType = new Map<string, ComparisonRow[]>();
+    for (const r of pairRows) if (r.scope === 'descriptor') byType.set(r.cancerType, [...(byType.get(r.cancerType) ?? []), r]);
+
+    return (
+      <Fragment key={p.key}>
+        <tr>
+          <td className={hdrCell}>
+            <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Cohort {idx + 1}</div>
+            {p.a && p.b && p.score !== null && <div className="text-[11px] text-slate-500">{Math.round(p.score * 100)}% match</div>}
+          </td>
+          <td className={`${hdrCell} border-l border-l-slate-200`}>
+            {p.a ? <span className="font-semibold text-slate-900">{cohortLabel(p.a)}</span> : <span className="text-slate-400 italic">no matching cohort</span>}
+          </td>
+          <td className={`${hdrCell} border-l border-l-slate-200`}>
+            {p.a && hasBoth ? (
+              <select
+                value={p.b?.cohortKey ?? ''}
+                onChange={(e) => repair(p.a!.cohortKey, e.target.value)}
+                title="Re-pair: choose which of Annotator B's cohorts this one is compared with"
+                className="w-full text-sm font-semibold text-slate-900 border border-slate-300 rounded-lg px-2 py-1 bg-white"
+              >
+                <option value="">— no matching cohort —</option>
+                {(B?.cohorts ?? []).map((c) => (
+                  <option key={c.cohortKey} value={c.cohortKey}>{cohortLabel(c)} ({cohortTypes(c).join(', ') || 'no types'})</option>
+                ))}
+              </select>
+            ) : p.b ? <span className="font-semibold text-slate-900">{cohortLabel(p.b)}</span> : <span className="text-slate-400 italic">no matching cohort</span>}
+          </td>
+          <td className={`${hdrCell} border-l border-l-slate-200 text-xs`}>
+            {dropped ? <Badge label="Dropped from label" tone="muted" /> : (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className={open.length ? 'text-red-700 font-medium' : 'text-emerald-700 font-medium'}>
+                  {open.length ? `${open.length} open` : 'Nothing open'}
+                </span>
+                {openFields.length > 1 && [0, 1].map((side) => (
+                  <button
+                    key={side}
+                    onClick={() => decide(openFields.map((row) => ({ row, value: side === 0 ? row.a : row.b })))}
+                    title={`Use ${names[side]}'s values for the ${openFields.length} open fields in this cohort`}
+                    className="px-2 py-0.5 border border-slate-300 bg-white rounded text-slate-700 hover:border-blue-400 hover:text-blue-700 transition"
+                  >
+                    All {short[side]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </td>
+        </tr>
+        {existsRow && renderRow(existsRow, 'Cohort on final label')}
+        {!dropped && (
+          <>
+            {typesRow && isVisible(typesRow) && renderRow(typesRow, 'Cancer types')}
+            {boundRows.filter(isVisible).map((r) => renderRow(r))}
+            {[...byType.entries()].map(([ct, typeRows]) => {
+              const inA = !!p.a?.applicableCancerTypes?.[ct as keyof Cohort['applicableCancerTypes']];
+              const inB = !!p.b?.applicableCancerTypes?.[ct as keyof Cohort['applicableCancerTypes']];
+              const excluded = finalTypes !== null && !finalTypes.has(ct);
+              const shown = excluded ? [] : typeRows.filter(isVisible);
+              const hidden = excluded ? 0 : typeRows.length - shown.length;
+              return (
+                <Fragment key={ct}>
+                  <tr>
+                    <td className={`${subCell} font-semibold text-slate-800`}>
+                      {CANCER_TYPE_LABELS[ct as keyof typeof CANCER_TYPE_LABELS] ?? ct}
+                      {hidden > 0 && <span className="font-normal text-slate-400"> · {hidden} hidden</span>}
+                    </td>
+                    {[inA, inB].map((has, side) => (
+                      <td key={side} className={`${subCell} border-l border-l-slate-200 ${has ? 'text-slate-600' : 'text-slate-400 italic'}`}>
+                        {has ? 'included' : 'not in cohort'}
+                      </td>
+                    ))}
+                    <td className={`${subCell} border-l border-l-slate-200`}>
+                      {excluded ? <Badge label="Excluded from label" tone="muted" />
+                        : finalTypes === null ? <span className="text-amber-700">Pending the cancer-type decision</span>
+                        : <span className="text-slate-600">On label</span>}
+                    </td>
+                  </tr>
+                  {shown.map((r) => renderRow(r))}
+                </Fragment>
+              );
+            })}
+          </>
+        )}
+      </Fragment>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -331,7 +462,7 @@ export function AdjudicationView({
             <div className="text-xs text-slate-600 whitespace-nowrap">
               <strong className={openCount === 0 ? 'text-emerald-700' : 'text-amber-700'}>{decidedCount}</strong>
               {' '}/ {decisionRows.length} decisions made
-              {autoRows.length > 0 && <span className="text-slate-400"> · {autoRows.length} auto-resolved</span>}
+              {autoCount > 0 && <span className="text-slate-400"> · {autoCount} auto-resolved</span>}
             </div>
           )}
           <Link
@@ -357,7 +488,7 @@ export function AdjudicationView({
                   <div key={i} className="flex items-center gap-2 text-sm">
                     <Chip label={i === 0 ? 'A' : 'B'} tone={i === 0 ? 'a' : 'b'} />
                     <span className={`inline-block w-2 h-2 rounded-full ${r.status === 'submitted' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                    <span className="font-medium text-slate-900">{r.expertName}</span>
+                    <span className="font-medium text-slate-900">{names[i]}</span>
                     <span className="text-xs text-slate-500">
                       {r.status === 'submitted'
                         ? `submitted ${r.submittedAt ? new Date(r.submittedAt).toLocaleString() : ''}`
@@ -373,9 +504,9 @@ export function AdjudicationView({
               )}
               {reviews.some((r) => r.notes?.trim()) && (
                 <div className="mt-3 space-y-2">
-                  {reviews.filter((r) => r.notes?.trim()).map((r, i) => (
+                  {reviews.map((r, i) => r.notes?.trim() && (
                     <div key={i} className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                      <strong className="text-slate-700">{r.expertName}:</strong>{' '}
+                      <strong className="text-slate-700">{names[i]}:</strong>{' '}
                       <span className="text-slate-600">{r.notes}</span>
                     </div>
                   ))}
@@ -399,7 +530,7 @@ export function AdjudicationView({
           </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-6 min-w-0">
           {reviews.length < 2 && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-900">
               This trial has {reviews.length} of 2 reviews — adjudication opens once both
@@ -407,67 +538,67 @@ export function AdjudicationView({
             </div>
           )}
 
-          {hasBoth && decisionRows.length > 0 && (
-            <p className="text-xs text-slate-500">
-              Keys: <Kbd>J</Kbd>/<Kbd>K</Kbd> next / previous · <Kbd>1</Kbd> {short[0]} · <Kbd>2</Kbd> {short[1]} ·
-              {' '}<Kbd>U</Kbd> union · <Kbd>O</Kbd> overlap · <Kbd>0</Kbd> blank. Picking moves to the next open decision.
-            </p>
-          )}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap text-xs">
+              <div className="flex items-center gap-4 flex-wrap">
+                <label className="text-slate-600 flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+                  <input type="checkbox" checked={hideBlank} onChange={(e) => setHideBlank(e.target.checked)} />
+                  Hide fields blank for both annotators
+                </label>
+                <label className="text-slate-600 flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+                  <input type="checkbox" checked={hideAgreed} onChange={(e) => setHideAgreed(e.target.checked)} />
+                  Hide fields the annotators agree on
+                </label>
+              </div>
+              {cohortMap !== null && (
+                <button onClick={() => savePairing(null)} className="text-blue-600 hover:underline">Reset to automatic cohort pairing</button>
+              )}
+            </div>
+            {hasBoth && decisionRows.length > 0 && (
+              <p className="text-xs text-slate-500">
+                Keys: <Kbd>J</Kbd>/<Kbd>K</Kbd> next / previous decision · <Kbd>1</Kbd> {short[0]} · <Kbd>2</Kbd> {short[1]} ·
+                {' '}<Kbd>U</Kbd> union · <Kbd>O</Kbd> overlap · <Kbd>0</Kbd> blank. Click any row to change its final value.
+                Re-pairing a cohort clears decisions already made in the cohorts involved.
+              </p>
+            )}
+          </div>
 
-          {hasBoth && (
-            <CohortsSection
-              pairs={pairs}
-              bCohorts={B?.cohorts ?? []}
-              names={short}
-              structural={decisionRows.filter(isStructural)}
-              cardProps={cardProps}
-              isCustomPairing={cohortMap !== null}
-              onRepair={repair}
-              onReset={() => savePairing(null)}
-            />
-          )}
-
-          {[...fieldGroups.entries()].map(([cohortKey, group]) => {
-            const open = group.rows.filter((r) => r.source === 'unresolved');
-            const byType = new Map<string, ResolvedRow[]>();
-            for (const r of group.rows) {
-              const t = r.scope === 'descriptor' ? r.cancerType : 'Cohort bounds';
-              byType.set(t, [...(byType.get(t) ?? []), r]);
-            }
-            return (
-              <section key={cohortKey}>
-                <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-                  <h2 className="text-xs uppercase tracking-wider text-red-600 font-semibold">
-                    {group.name} · {open.length} open of {group.rows.length}
-                  </h2>
-                  {open.length > 1 && (
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-500">For the {open.length} open fields:</span>
-                      {[0, 1].map((side) => (
-                        <button
-                          key={side}
-                          onClick={() => decide(open.map((row) => ({ row, value: side === 0 ? row.a : row.b })))}
-                          className="px-2.5 py-1 border border-slate-300 rounded-lg text-slate-700 hover:border-blue-400 hover:text-blue-700 transition"
-                        >
-                          Use {short[side]}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-5">
-                  {[...byType.entries()].map(([type, typeRows]) => (
-                    <div key={type}>
-                      <div className="text-[11px] font-semibold text-slate-500 mb-2">{type}</div>
-                      <div className="space-y-3">
-                        {typeRows.map((row) => <DecisionCard key={keyOf(row)} {...cardProps(row)} />)}
-                      </div>
-                    </div>
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-clip">
+            <table className="w-full table-fixed text-sm border-separate border-spacing-0">
+              <colgroup>
+                <col className="w-[22%]" />
+                <col className="w-[24%]" />
+                <col className="w-[24%]" />
+                <col className="w-[30%]" />
+              </colgroup>
+              <thead>
+                <tr>
+                  {['Field', names[0], names[1], 'Final label'].map((h, i) => (
+                    <th
+                      key={h}
+                      className={`sticky top-[61px] z-10 bg-white px-3 py-2 text-left text-[10px] uppercase tracking-wider font-semibold border-b border-slate-200 ${
+                        i === 1 ? 'text-violet-700 border-l border-l-slate-100' : i === 2 ? 'text-amber-800 border-l border-l-slate-100' : i === 3 ? 'text-slate-700 border-l border-l-slate-100' : 'text-slate-500'
+                      }`}
+                    >
+                      {h}
+                    </th>
                   ))}
-                </div>
-              </section>
-            );
-          })}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className={hdrCell}>
+                    <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Trial level</div>
+                  </td>
+                  <td colSpan={3} className={`${hdrCell} border-l border-l-slate-200 text-xs text-slate-500`}>
+                    Derived from the final cohorts: cancer types are their union, bounds the widest range.
+                  </td>
+                </tr>
+                {trialRows.map((r) => renderRow(r))}
+                {pairs.map(renderPair)}
+              </tbody>
+            </table>
+          </div>
 
           {hasBoth && openCount === 0 && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-sm text-emerald-900 flex items-center justify-between gap-3">
@@ -478,54 +609,11 @@ export function AdjudicationView({
             </div>
           )}
 
-          {autoRows.length > 0 && (
-            <details className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-              <summary className="px-4 py-3 text-xs uppercase tracking-wider text-slate-500 font-semibold cursor-pointer">
-                Auto-resolved ({autoRows.length})
-              </summary>
-              <div className="divide-y divide-slate-100 border-t border-slate-100">
-                {autoRows.map((row) => <AutoRow key={keyOf(row)} {...cardProps(row)} reason={autoReasonLabel(row, short)} />)}
-              </div>
-            </details>
-          )}
+          {hasBoth && <NoteBox nctId={trial.nctId} initialNote={initialNote} initialSavedAt={initialNoteSavedAt} />}
 
-          {agreements.length > 0 && (
-            <details className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-              <summary className="px-4 py-3 text-xs uppercase tracking-wider text-slate-500 font-semibold cursor-pointer">
-                {hasBoth ? `Agreements (${agreements.length} filled in)` : `Current values (${agreements.length})`}
-              </summary>
-              <div className="divide-y divide-slate-100 border-t border-slate-100">
-                {agreements.map((row) => (
-                  <div key={keyOf(row)} className="px-4 py-2.5 grid grid-cols-[1fr_auto] gap-4 items-center text-sm">
-                    <div className="min-w-0">
-                      <span className="font-medium text-slate-800">{row.def.label}</span>
-                      <span className="text-xs text-slate-400 ml-2 font-mono">{row.cohortDisplayName} · {scopeLabel(row)}</span>
-                    </div>
-                    <ValueChip value={row.a} optionHelp={row.def.optionHelp} />
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
-
-          <details className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-            <summary className="px-4 py-3 text-xs uppercase tracking-wider text-slate-500 font-semibold cursor-pointer">
-              Trial level (derived from the cohorts)
-            </summary>
-            <div className="divide-y divide-slate-100 border-t border-slate-100">
-              {trialRows.map((row) => (
-                <div key={keyOf(row)} className="px-4 py-2.5 grid grid-cols-[10rem_1fr] gap-4 items-start text-sm">
-                  <span className="font-medium text-slate-800">{row.def.label}</span>
-                  <div className="space-y-1 text-xs text-slate-500">
-                    <div>Final: <ValueChip value={row.value} optionHelp={row.def.optionHelp} /></div>
-                    {reviews.map((r, i) => (
-                      <div key={i}>{short[i]} entered: <ValueChip value={i === 0 ? row.rawA : row.rawB} optionHelp={row.def.optionHelp} /></div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </details>
+          {reviews.map((r, i) => (
+            <AnnotationTable key={i} label={names[i]} tone={i === 0 ? 'a' : 'b'} review={r} />
+          ))}
         </div>
       </main>
     </div>
@@ -533,225 +621,356 @@ export function AdjudicationView({
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Cohort pairing and structural decisions
+// One comparison row: field | Annotator A | Annotator B | final label
 // ──────────────────────────────────────────────────────────────────────────
 
-interface CardProps {
-  row: ResolvedRow;
+// An annotator's value. Multi-selects colour the options the other annotator
+// didn't pick; "entered as" shows the raw value when normalization changed it.
+function SideValue({ row, side }: { row: ComparisonRow; side: 0 | 1 }) {
+  const v = side === 0 ? row.a : row.b;
+  const raw = side === 0 ? row.rawA : row.rawB;
+  const other = side === 0 ? row.b : row.a;
+  const help = row.def.optionHelp;
+  if (row.fieldKey === COHORT_EXISTS_FIELD) {
+    return v ? <span className="text-slate-800">Drew this cohort</span> : <span className="text-slate-400 italic">No such cohort</span>;
+  }
+  if (row.oneSided && row.oneSided !== (side === 0 ? 'a' : 'b')) {
+    return <span className="text-slate-300" title="Not in this annotator's cohort">—</span>;
+  }
+  let shown: React.ReactNode;
+  if (Array.isArray(v) && v.length > 0) {
+    const otherVals = Array.isArray(other) ? other : [];
+    const compare = !row.oneSided;
+    shown = (
+      <span className="inline-flex flex-wrap gap-1">
+        {v.map((x) => (
+          <Chip key={x} label={x} help={help?.[x]} tone={!compare || otherVals.includes(x) ? 'shared' : side === 0 ? 'a' : 'b'} />
+        ))}
+      </span>
+    );
+  } else {
+    shown = <ValueChip value={v} optionHelp={help} />;
+  }
+  return (
+    <div>
+      {shown}
+      {normValue(raw) !== normValue(v) && (
+        <div className="text-[10px] text-slate-400 mt-0.5">
+          entered as {isBlank(raw) ? 'blank' : Array.isArray(raw) ? `${raw.length} options (all)` : String(raw)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CompareRow({
+  row, res, label, names, active, isDecided, canDecide, onActivate, onPick, onClear, rowRef,
+}: {
+  row: ComparisonRow;
+  res: ResolvedRow | undefined;
+  label: string;
   names: Names;
-  final: FieldValue | undefined;
-  isDecided: boolean;
   active: boolean;
+  isDecided: boolean;
+  canDecide: boolean;
   onActivate: () => void;
   onPick: (v: FieldValue) => void;
   onClear: () => void;
-  cardRef: (el: HTMLDivElement | null) => void;
-}
-
-function CohortsSection({
-  pairs, bCohorts, names, structural, cardProps, isCustomPairing, onRepair, onReset,
-}: {
-  pairs: CohortPair[];
-  bCohorts: TrialAnswers['cohorts'];
-  names: Names;
-  structural: ResolvedRow[];
-  cardProps: (row: ResolvedRow) => CardProps;
-  isCustomPairing: boolean;
-  onRepair: (aKey: string, bKey: string) => void;
-  onReset: () => void;
+  rowRef: (el: HTMLTableRowElement | null) => void;
 }) {
-  const typesOf = (c?: TrialAnswers['cohorts'][number]) => Object.keys(c?.applicableCancerTypes ?? {});
-  const cohortLabel = (c?: { displayName: string; cohortKey: string }) => c ? (c.displayName?.trim() || c.cohortKey) : '';
-  return (
-    <section>
-      <div className="flex items-baseline justify-between gap-3 mb-3">
-        <h2 className="text-xs uppercase tracking-wider text-slate-600 font-semibold">
-          Cohorts ({pairs.length}) · {isCustomPairing ? 'paired by reviewer' : 'paired automatically by content'}
-        </h2>
-        {isCustomPairing && (
-          <button onClick={onReset} className="text-xs text-blue-600 hover:underline">Reset to automatic pairing</button>
-        )}
-      </div>
-      <div className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100">
-        {pairs.map((p) => {
-          const rowsHere = structural.filter((r) => r.cohortKey === p.key);
-          return (
-            <div key={p.key} className="p-4 space-y-3">
-              <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-start text-sm">
-                <div className="min-w-0">
-                  <div className="text-[10px] uppercase tracking-wider text-violet-700 font-semibold">{names[0]}</div>
-                  {p.a ? (
-                    <>
-                      <div className="font-medium text-slate-900 truncate">{cohortLabel(p.a)}</div>
-                      <div className="flex flex-wrap gap-1 mt-1">{typesOf(p.a).map((t) => <Chip key={t} label={t} tone="a" />)}</div>
-                    </>
-                  ) : <div className="text-slate-400 italic">no matching cohort</div>}
-                </div>
-                <div className="text-slate-400 pt-4 text-center">
-                  ⇄
-                  {p.score !== null && <div className="text-[10px] text-slate-400 mt-1">{Math.round(p.score * 100)}% match</div>}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] uppercase tracking-wider text-amber-800 font-semibold">{names[1]}</div>
-                  {p.a ? (
-                    <select
-                      value={p.b?.cohortKey ?? ''}
-                      onChange={(e) => onRepair(p.a!.cohortKey, e.target.value)}
-                      className="mt-0.5 w-full text-sm border border-slate-300 rounded-lg px-2 py-1 bg-white"
-                    >
-                      <option value="">— no matching cohort —</option>
-                      {bCohorts.map((c) => (
-                        <option key={c.cohortKey} value={c.cohortKey}>
-                          {cohortLabel(c)} ({typesOf(c).join(', ') || 'no types'})
-                        </option>
-                      ))}
-                    </select>
-                  ) : <div className="font-medium text-slate-900 truncate">{cohortLabel(p.b)}</div>}
-                  {p.b && <div className="flex flex-wrap gap-1 mt-1">{typesOf(p.b).map((t) => <Chip key={t} label={t} tone="b" />)}</div>}
-                </div>
-              </div>
-              {rowsHere.map((row) => <DecisionCard key={keyOf(row)} {...cardProps(row)} />)}
-            </div>
-          );
-        })}
-      </div>
-      <p className="text-[11px] text-slate-400 mt-2">
-        Changing a pairing clears decisions already made in the cohorts involved.
-      </p>
-    </section>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// Decision card
-// ──────────────────────────────────────────────────────────────────────────
-
-function DecisionCard({
-  row, names, final: finalValue, isDecided, active, onActivate, onPick, onClear, cardRef,
-}: CardProps) {
   const [showCustom, setShowCustom] = useState(false);
-  const [customValue, setCustomValue] = useState<FieldValue>(finalValue ?? null);
-  const picks = quickPicks(row, names);
-  const isMulti = row.def.kind === 'multi';
-  const A = isMulti ? ((row.a as string[] | null) ?? []) : [];
-  const B = isMulti ? ((row.b as string[] | null) ?? []) : [];
-  const shared = A.filter((x) => B.includes(x));
-  const onlyA = A.filter((x) => !B.includes(x));
-  const onlyB = B.filter((x) => !A.includes(x));
-  const help = row.def.optionHelp;
-  const title = row.fieldKey === COHORT_EXISTS_FIELD
-    ? `Keep this cohort? (only ${row.a ? names[0] : names[1]} drew it)`
-    : row.def.label;
+  const [customValue, setCustomValue] = useState<FieldValue>(res?.value ?? null);
+  const open = res?.source === 'unresolved';
+  const isExists = row.fieldKey === COHORT_EXISTS_FIELD;
+  const status = statusOf(res, names);
+  const picks = canDecide && (open || active) ? quickPicks(row, names) : [];
+  const td = 'px-3 py-2 align-top border-t border-slate-100';
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+
+  const finalValue = !res || open ? null
+    : isExists ? <span className="font-medium text-slate-800">{res.value ? 'Kept' : 'Dropped'}</span>
+    : <ValueChip value={res.value} optionHelp={row.def.optionHelp} />;
 
   return (
-    <div
-      ref={cardRef}
-      onClick={onActivate}
-      className={`border rounded-2xl p-4 shadow-sm transition ${
-        isDecided ? 'bg-emerald-50/50 border-emerald-200' : 'bg-white border-red-200'
-      } ${active ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}
+    <tr
+      ref={rowRef}
+      onClick={canDecide ? onActivate : undefined}
+      className={`${canDecide ? 'cursor-pointer' : ''} ${active ? 'bg-blue-50' : open ? 'bg-red-50/40 hover:bg-red-50' : 'hover:bg-slate-50'}`}
     >
-      <div className="flex items-baseline justify-between gap-3 mb-3">
-        <div className="min-w-0">
-          <span className="font-semibold text-slate-900">{title}</span>
-          <span className="text-xs text-slate-400 ml-2 font-mono">{scopeLabel(row)} · {row.fieldKey}</span>
-        </div>
-        <span className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded font-semibold whitespace-nowrap ${
-          isDecided ? 'text-emerald-700 bg-emerald-100' : 'text-red-700 bg-red-100'
-        }`}>{isDecided ? 'Decided' : 'Open'}</span>
-      </div>
-
-      {isMulti ? (
-        <div className="space-y-1.5 text-xs mb-3">
-          {shared.length > 0 && (
-            <div className="flex gap-2 items-start"><span className="w-20 shrink-0 text-slate-500">Both</span>
-              <span className="flex flex-wrap gap-1">{shared.map((v) => <Chip key={v} label={v} help={help?.[v]} tone="shared" />)}</span></div>
-          )}
-          <div className="flex gap-2 items-start"><span className="w-20 shrink-0 text-violet-700">Only {names[0]}</span>
-            <span className="flex flex-wrap gap-1">{onlyA.length ? onlyA.map((v) => <Chip key={v} label={v} help={help?.[v]} tone="a" />) : <span className="text-slate-400 italic">{A.length ? 'nothing extra' : 'blank'}</span>}</span></div>
-          <div className="flex gap-2 items-start"><span className="w-20 shrink-0 text-amber-800">Only {names[1]}</span>
-            <span className="flex flex-wrap gap-1">{onlyB.length ? onlyB.map((v) => <Chip key={v} label={v} help={help?.[v]} tone="b" />) : <span className="text-slate-400 italic">{B.length ? 'nothing extra' : 'blank'}</span>}</span></div>
-        </div>
-      ) : row.fieldKey !== COHORT_EXISTS_FIELD && (
-        <div className="grid grid-cols-2 gap-3 mb-3 text-sm">
-          {[0, 1].map((side) => {
-            const v = side === 0 ? row.a : row.b;
-            const raw = side === 0 ? row.rawA : row.rawB;
-            return (
-              <div key={side} className="border border-slate-200 rounded-xl px-3 py-2 bg-white">
-                <div className={`text-[10px] uppercase tracking-wider font-semibold mb-1 ${side === 0 ? 'text-violet-700' : 'text-amber-800'}`}>{names[side]}</div>
-                <ValueChip value={v} optionHelp={help} />
-                {String(raw ?? '') !== String(v ?? '') && (
-                  <div className="text-[10px] text-slate-400 mt-0.5">entered as {isBlank(raw) ? 'blank' : String(raw)}</div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="flex items-center gap-2 flex-wrap">
-        {picks.map((p) => (
-          <button
-            key={p.id}
-            onClick={(e) => { e.stopPropagation(); onPick(p.value); }}
-            className="text-xs px-2.5 py-1 border border-slate-300 rounded-lg text-slate-700 hover:border-blue-400 hover:text-blue-700 transition"
-          >
-            {p.label}<Kbd>{p.shortcut.toUpperCase()}</Kbd>
-          </button>
-        ))}
-        {row.fieldKey !== COHORT_EXISTS_FIELD && (
-          <button onClick={(e) => { e.stopPropagation(); setShowCustom((s) => !s); }} className="text-xs text-blue-600 hover:underline ml-1">
-            {showCustom ? 'Hide custom' : 'Custom…'}
-          </button>
-        )}
-        <div className="ml-auto flex items-center gap-2 text-xs">
-          <span className="text-slate-500">Final:</span>
-          {isDecided ? <ValueChip value={finalValue as FieldValue} optionHelp={help} /> : <span className="text-slate-400 italic">not set</span>}
-          {isDecided && (
-            <button onClick={(e) => { e.stopPropagation(); onClear(); }} className="text-red-600 hover:underline">Clear</button>
-          )}
-        </div>
-      </div>
-
-      {showCustom && (
-        <div className="mt-3 border-t border-slate-200 pt-2 flex items-end gap-3 flex-wrap" onClick={(e) => e.stopPropagation()}>
-          <div className="flex-1 min-w-[260px]">
-            <FieldEditor def={row.def} value={customValue} onChange={setCustomValue} />
+      <td className={`${td} text-slate-700 ${active ? 'shadow-[inset_3px_0_0_#3b82f6]' : ''}`}>
+        <div className="font-medium break-words">{label}</div>
+      </td>
+      <td className={`${td} border-l border-l-slate-100 break-words`}><SideValue row={row} side={0} /></td>
+      <td className={`${td} border-l border-l-slate-100 break-words`}><SideValue row={row} side={1} /></td>
+      <td className={`${td} border-l border-l-slate-100 bg-slate-50/50`}>
+        <div className="space-y-1.5">
+          <div className="flex items-start gap-2 flex-wrap">
+            <Badge {...status} />
+            {finalValue}
+            {isDecided && canDecide && (
+              <button onClick={(e) => { stop(e); onClear(); }} className="text-[11px] text-red-600 hover:underline ml-auto">Clear</button>
+            )}
           </div>
-          <button
-            onClick={() => { onPick(customValue); setShowCustom(false); }}
-            className="text-xs px-3 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition mb-2"
-          >
-            Use as final
-          </button>
+          {picks.length > 0 && (
+            <div className="flex flex-wrap gap-1" onClick={stop}>
+              {picks.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => onPick(p.value)}
+                  className="text-[11px] px-2 py-0.5 border border-slate-300 bg-white rounded text-slate-700 hover:border-blue-400 hover:text-blue-700 transition"
+                >
+                  {p.label}<Kbd>{p.shortcut.toUpperCase()}</Kbd>
+                </button>
+              ))}
+              {!isExists && (
+                <button onClick={() => setShowCustom((s) => !s)} className="text-[11px] text-blue-600 hover:underline px-1">
+                  {showCustom ? 'Hide custom' : 'Custom…'}
+                </button>
+              )}
+            </div>
+          )}
+          {showCustom && (
+            <div className="border-t border-slate-200 pt-1" onClick={stop}>
+              <FieldEditor def={row.def} value={customValue} onChange={setCustomValue} />
+              <button
+                onClick={() => { onPick(customValue); setShowCustom(false); }}
+                className="text-xs px-3 py-1.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition"
+              >
+                Use as final
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </td>
+    </tr>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Adjudicator's note
+// ──────────────────────────────────────────────────────────────────────────
+
+function NoteBox({ nctId, initialNote, initialSavedAt }: { nctId: string; initialNote: string; initialSavedAt: string | null }) {
+  const [text, setText] = useState(initialNote);
+  const [saved, setSaved] = useState(initialNote);
+  const [savedAt, setSavedAt] = useState<string | null>(initialSavedAt);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dirty = text.trim() !== saved.trim();
+
+  async function save() {
+    if (!dirty || busy) return;
+    setBusy(true);
+    setError(null);
+    const res = await setAdjudicationNoteAction({ nctId, note: text });
+    setBusy(false);
+    if (!res.ok) { setError(res.error ?? 'Could not save the note.'); return; }
+    setSaved(text.trim());
+    setText(text.trim());
+    setSavedAt(text.trim() ? new Date().toISOString() : null);
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-4">
+      <label htmlFor="adjudication-note" className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+        Adjudication reasoning
+      </label>
+      <p className="text-xs text-slate-500 mt-1">
+        Briefly explain the reasoning behind your decisions on this trial (e.g. which criterion settled a disagreement).
+      </p>
+      <textarea
+        id="adjudication-note"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); save(); } }}
+        rows={3}
+        maxLength={5000}
+        placeholder="e.g. Kept cohort B: the protocol enrolls a separate expansion arm for HER2-low disease."
+        className="mt-2 w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+      />
+      <div className="mt-2 flex items-center justify-between gap-3 text-xs">
+        <span className={error ? 'text-red-700' : dirty ? 'text-amber-700' : 'text-slate-400'}>
+          {error ?? (dirty ? 'Unsaved changes' : savedAt ? `Saved ${new Date(savedAt).toLocaleString()}` : 'No note yet')}
+        </span>
+        <button
+          type="button"
+          onClick={save}
+          disabled={!dirty || busy}
+          className="px-3 py-1.5 rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-500 transition"
+        >
+          {busy ? 'Saving…' : 'Save note'}<Kbd>⌘↵</Kbd>
+        </button>
+      </div>
     </div>
   );
 }
 
-// A difference resolved without a decision, with the reason and an override.
-function AutoRow(props: CardProps & { reason: string }) {
-  const { row, names, isDecided, final: finalValue, reason } = props;
-  const [open, setOpen] = useState(false);
+// ──────────────────────────────────────────────────────────────────────────
+// Full annotation, as entered: one table per annotator, cohorts side by side.
+// Rows are the cohort bounds, then every field of every cancer type that any
+// of the annotator's cohorts covers, grouped under a cancer-type heading.
+// ──────────────────────────────────────────────────────────────────────────
+
+function sortedTypes(types: string[]): string[] {
+  const order = (t: string) => { const i = ALL_CANCER_TYPES.indexOf(t as never); return i < 0 ? 999 : i; };
+  return [...types].sort((x, y) => order(x) - order(y));
+}
+
+const TONE_TEXT = { a: 'text-violet-700', b: 'text-amber-800' } as const;
+const TONE_DOT = { a: 'bg-violet-500', b: 'bg-amber-500' } as const;
+
+const COHORT_BOUNDS: { key: 'minAge' | 'maxAge' | 'ecogMin' | 'ecogMax'; label: string }[] = [
+  { key: 'minAge', label: 'Min age' },
+  { key: 'maxAge', label: 'Max age' },
+  { key: 'ecogMin', label: 'ECOG min' },
+  { key: 'ecogMax', label: 'ECOG max' },
+];
+
+const NOT_IN_COHORT = Symbol('not in cohort');
+
+function AnnotationTable({ label, tone, review }: { label: string; tone: 'a' | 'b'; review: ReviewSummary }) {
+  const [hideEmpty, setHideEmpty] = useState(false);
+  const [hideSame, setHideSame] = useState(false);
+  const ans = review.answers;
+  const cohorts = ans.cohorts ?? [];
+  const typesOf = (c: Cohort) => sortedTypes(Object.keys(c.applicableCancerTypes ?? {}));
+  const usedTypes = sortedTypes([...new Set(cohorts.flatMap(typesOf))]);
+
+  // Value of one descriptor field in one cohort, or NOT_IN_COHORT when the
+  // cohort doesn't cover that cancer type.
+  const cell = (c: Cohort, ct: string, fk: string): FieldValue | typeof NOT_IN_COHORT => {
+    const block = c.applicableCancerTypes?.[ct as keyof Cohort['applicableCancerTypes']];
+    return block === undefined ? NOT_IN_COHORT : (block[fk] ?? null);
+  };
+
+  // A row is "the same in every cohort" when every cohort has a value for it
+  // (a cohort without the cancer type counts as different) and the values
+  // match. Only meaningful with two or more cohorts.
+  const canCompare = cohorts.length > 1;
+  const allSame = (vals: (FieldValue | typeof NOT_IN_COHORT)[]) =>
+    canCompare && vals.every((v) => v !== NOT_IN_COHORT) && new Set(vals.map(normValue)).size === 1;
+  const showRow = (vals: (FieldValue | typeof NOT_IN_COHORT)[]) =>
+    (!hideEmpty || vals.some((v) => v !== NOT_IN_COHORT && !isBlank(v))) && !(hideSame && allSame(vals));
+
+  const typesRowShown = showRow(cohorts.map(typesOf));
+  const boundRows = COHORT_BOUNDS.filter((b) => showRow(cohorts.map((c) => c[b.key])));
+  const sections = usedTypes.map((ct) => {
+    const fields = Object.entries(BLOCKS[ct as keyof typeof BLOCKS]?.fields ?? {});
+    const rows = fields.filter(([fk]) => showRow(cohorts.map((c) => cell(c, ct, fk))));
+    return { ct, total: fields.length, rows };
+  });
+
+  const stickyCol = 'sticky left-0 z-[1] bg-white border-r border-slate-200';
+  const td = 'px-3 py-1.5 align-top border-t border-slate-100';
+
   return (
-    <div className="px-4 py-2.5 text-sm">
-      <div className="grid grid-cols-[1fr_auto] gap-4 items-center">
-        <div className="min-w-0">
-          <span className="font-medium text-slate-800">{row.def.label}</span>
-          <span className="text-xs text-slate-400 ml-2 font-mono">{row.cohortDisplayName} · {scopeLabel(row)}</span>
-          <span className="ml-2 text-[10px] uppercase tracking-wider text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded font-semibold">{reason}</span>
-          {isDecided && <span className="ml-1 text-[10px] uppercase tracking-wider text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded font-semibold">Overridden</span>}
+    <details className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+      <summary className="px-4 py-3 text-xs uppercase tracking-wider text-slate-500 font-semibold cursor-pointer">
+        <span className={`inline-block w-2 h-2 rounded-full mr-2 align-middle ${TONE_DOT[tone]}`} />
+        <span className={TONE_TEXT[tone]}>{label}</span> — full annotation
+        <span className="normal-case tracking-normal font-normal text-slate-400">
+          {' '}· {cohorts.length} cohort{cohorts.length === 1 ? '' : 's'}{review.status !== 'submitted' && ' · in progress'}
+        </span>
+      </summary>
+      <div className="border-t border-slate-100">
+        <div className="px-4 py-2.5 flex flex-wrap justify-between items-center gap-3 text-xs">
+          <span className="text-slate-600">
+            <strong className="text-slate-800">Trial level:</strong>{' '}
+            <ValueChip value={sortedTypes(ans.cancerTypes ?? [])} optionHelp={CANCER_TYPE_DEFINITIONS} />
+            {' '}· Age {ans.minAge ?? '–'} to {ans.maxAge ?? '–'} · ECOG {ans.ecogMin ?? '–'} to {ans.ecogMax ?? '–'}
+            <span className="text-slate-400"> · as entered, before blank rules or derivation</span>
+          </span>
+          <div className="flex items-center gap-4">
+            <label className="text-slate-600 flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+              <input type="checkbox" checked={hideEmpty} onChange={(e) => setHideEmpty(e.target.checked)} />
+              Hide fields blank in every cohort
+            </label>
+            <label
+              className={`flex items-center gap-1.5 whitespace-nowrap ${canCompare ? 'text-slate-600 cursor-pointer' : 'text-slate-300 cursor-not-allowed'}`}
+              title={canCompare ? undefined : 'Only one cohort'}
+            >
+              <input type="checkbox" disabled={!canCompare} checked={hideSame && canCompare} onChange={(e) => setHideSame(e.target.checked)} />
+              Hide fields the same in every cohort
+            </label>
+          </div>
         </div>
-        <button onClick={() => setOpen((o) => !o)} className="text-xs text-blue-600 hover:underline">{open ? 'Close' : 'Override'}</button>
+        {cohorts.length === 0 ? (
+          <div className="px-4 pb-4 text-sm text-slate-400 italic">No cohorts</div>
+        ) : (
+          <div className="overflow-x-auto border-t border-slate-200">
+            <table className="text-sm border-separate border-spacing-0 min-w-full">
+              <thead>
+                <tr>
+                  <th className={`${stickyCol} px-3 py-2 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold min-w-[12rem]`}>
+                    Field
+                  </th>
+                  {cohorts.map((c) => (
+                    <th key={c.cohortKey} className="px-3 py-2 text-left font-semibold text-slate-900 min-w-[11rem] border-l border-slate-100 bg-slate-50">
+                      {c.displayName || c.cohortKey}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {typesRowShown && (
+                  <tr>
+                    <td className={`${stickyCol} ${td} text-slate-600`}>Cancer types</td>
+                    {cohorts.map((c) => (
+                      <td key={c.cohortKey} className={`${td} border-l`}>
+                        <ValueChip value={typesOf(c)} optionHelp={CANCER_TYPE_DEFINITIONS} />
+                      </td>
+                    ))}
+                  </tr>
+                )}
+                {boundRows.map((b) => (
+                  <tr key={b.key}>
+                    <td className={`${stickyCol} ${td} text-slate-600`}>{b.label}</td>
+                    {cohorts.map((c) => (
+                      <td key={c.cohortKey} className={`${td} border-l`}><ValueChip value={c[b.key]} /></td>
+                    ))}
+                  </tr>
+                ))}
+                {sections.map(({ ct, total, rows }) => (
+                  <Fragment key={ct}>
+                    <tr>
+                      <td className="sticky left-0 z-[1] bg-slate-100 px-3 py-1.5 border-t border-slate-200 text-xs font-semibold text-slate-800 whitespace-nowrap">
+                        {CANCER_TYPE_LABELS[ct as keyof typeof CANCER_TYPE_LABELS] ?? ct}
+                        <span className="font-normal text-slate-500"> · {total} field{total === 1 ? '' : 's'}</span>
+                      </td>
+                      {cohorts.map((c) => (
+                        <td key={c.cohortKey} className="bg-slate-100 border-t border-slate-200 border-l border-l-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
+                          {c.applicableCancerTypes?.[ct as keyof Cohort['applicableCancerTypes']] ? 'included' : 'not in cohort'}
+                        </td>
+                      ))}
+                    </tr>
+                    {rows.length === 0 && (
+                      <tr>
+                        <td className={`${stickyCol} ${td} text-slate-400 italic`}>
+                          {!total ? 'No fields' : hideSame && canCompare ? 'No fields shown (blank or the same everywhere)' : 'All fields blank'}
+                        </td>
+                        {cohorts.map((c) => <td key={c.cohortKey} className={`${td} border-l`} />)}
+                      </tr>
+                    )}
+                    {rows.map(([fk, def]) => (
+                      <tr key={fk} className="hover:bg-blue-50/40">
+                        <td className={`${stickyCol} ${td} text-slate-600`}>{def.label}</td>
+                        {cohorts.map((c) => {
+                          const v = cell(c, ct, fk);
+                          return v === NOT_IN_COHORT ? (
+                            <td key={c.cohortKey} className={`${td} border-l bg-slate-50 text-slate-300 text-center`}>—</td>
+                          ) : (
+                            <td key={c.cohortKey} className={`${td} border-l`}><ValueChip value={v} optionHelp={def.optionHelp} /></td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-      <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
-        <span>{names[0]}: <ValueChip value={row.rawA} optionHelp={row.def.optionHelp} /></span>
-        <span>{names[1]}: <ValueChip value={row.rawB} optionHelp={row.def.optionHelp} /></span>
-        <span>Final: <ValueChip value={isDecided ? (finalValue as FieldValue) : (row.oneSided === 'b' ? row.b : row.a)} optionHelp={row.def.optionHelp} /></span>
-      </div>
-      {open && <div className="mt-2"><DecisionCard {...props} active={false} /></div>}
-    </div>
+    </details>
   );
 }

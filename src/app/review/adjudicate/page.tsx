@@ -13,7 +13,6 @@ interface Row {
   position: number;
   claim_count: number;
   submitted_count: number;
-  reviewer_names: string[] | null;
   last_adjudicated_at: string | null;
   last_review_update: string | null;
 }
@@ -47,13 +46,11 @@ export default async function AdjudicateList({
       SELECT t.nct_id, t.brief_title, t.position,
              COUNT(a.*)::int AS claim_count,
              COUNT(a.*) FILTER (WHERE a.status = 'submitted')::int AS submitted_count,
-             ARRAY_AGG(u.name ORDER BY a.started_at) FILTER (WHERE u.name IS NOT NULL) AS reviewer_names,
              (SELECT MAX(td.decided_at) FROM trial_adjudications td WHERE td.nct_id = t.nct_id) AS last_adjudicated_at,
              MAX(a.updated_at) AS last_review_update
       FROM trials t
       LEFT JOIN annotations a ON a.nct_id = t.nct_id
       LEFT JOIN trial_assignments ta ON ta.expert_id = a.expert_id AND ta.nct_id = a.nct_id AND ta.is_test_trial = FALSE
-      LEFT JOIN users u ON u.id = a.expert_id
       WHERE a.id IS NULL OR ta.expert_id IS NOT NULL
       GROUP BY t.nct_id
       HAVING COUNT(a.*) > 0
@@ -179,7 +176,6 @@ export default async function AdjudicateList({
                         )}
                         {st.decided > 0 && <span className="text-purple-700">· {st.decided} decided</span>}
                         {st.autoResolved > 0 && <span>· {st.autoResolved} auto-resolved</span>}
-                        {t.reviewer_names && t.reviewer_names.length > 0 && <span>· {t.reviewer_names.join(', ')}</span>}
                       </div>
                     </div>
                   </div>
