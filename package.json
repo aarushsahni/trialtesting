@@ -17,6 +17,7 @@
     "replace-test-trials": "tsx scripts/replace-test-trials.ts",
     "add-test-trials": "tsx scripts/add-test-trials.ts",
     "sync-guide": "tsx scripts/sync-guide.ts",
+    "pull-guide": "tsx scripts/pull-guide.ts",
     "remove-test-trials": "tsx scripts/remove-test-trials.ts",
     "remove-non-test-trials": "tsx scripts/remove-non-test-trials.ts",
     "remove-test-users": "tsx scripts/remove-test-users.ts",

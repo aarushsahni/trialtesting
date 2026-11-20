@@ -6,20 +6,25 @@
 // slot (e.g. a slot was reassigned after the work was done), it fills the
 // remaining position in started_at order.
 //
-// The adjudicated label for each field is, in priority order:
+// The adjudicated label is built by resolveRows (src/lib/adjudication-rows.ts).
+// Each field's value is, in priority order:
 //   adjudicated      — a reviewer decision exists in trial_adjudications
-//   agreed           — both annotators gave the same value
+//   agreed           — both annotators gave the same value after normalization
+//                      (blank rules, cohort bounds inherited from the trial)
 //   single_annotator — only one submitted annotation exists
+//   one_sided        — the field is in a cohort or cancer type only one
+//                      annotator has; it takes that annotator's value
 //   unresolved       — the annotators disagree and nobody has decided (value null)
+//   derived          — trial-level fields, computed from the final cohorts
 
 import { query } from './db';
-import { buildComparisonRows, adjudicationKey } from './adjudication-rows';
 import {
-  BlockAnswers, CancerType, Cohort, FieldValue, TrialAnswers,
-} from './types';
+  COHORT_MAP_FIELD, CohortMap, FieldSource, adjudicationKey, buildComparisonRows, resolveRows,
+} from './adjudication-rows';
+import { FieldValue, TRIAL_LEVEL_SENTINEL, TrialAnswers } from './types';
 
+export type { FieldSource } from './adjudication-rows';
 export type LabelSource = 'annotator1' | 'annotator2' | 'adjudicated';
-export type FieldSource = 'adjudicated' | 'agreed' | 'single_annotator' | 'unresolved';
 
 export interface CorpusAnnotation {
   expertName: string;
@@ -36,6 +41,7 @@ export interface CorpusTrial {
   annotator1: CorpusAnnotation | null;
   annotator2: CorpusAnnotation | null;
   adjudications: Map<string, { value: FieldValue; decidedBy: string | null; decidedAt: string }>;
+  cohortMap: CohortMap | null;   // reviewer-saved cohort pairing, if any
 }
 
 interface TrialDbRow {
@@ -70,6 +76,21 @@ function emptyAnswers(nctId: string): TrialAnswers {
   return { nctId, expertId: null, cancerTypes: [], minAge: null, maxAge: null, ecogMin: null, ecogMax: null, cohorts: [] };
 }
 
+// [annotator 1, annotator 2] for one trial: the annotations by the experts
+// holding the trial's slot_1 / slot_2, with any leftovers filling the empty
+// positions in the given (started_at) order. The adjudication screen uses the
+// same order, so its cohort pairing and keys match the export's.
+export function orderBySlot<T extends { expert_slot: number | null }>(
+  anns: T[], slot1: number | null, slot2: number | null,
+): [T | null, T | null] {
+  let first = anns.find((a) => a.expert_slot !== null && a.expert_slot === slot1) ?? null;
+  let second = anns.find((a) => a !== first && a.expert_slot !== null && a.expert_slot === slot2) ?? null;
+  const rest = anns.filter((a) => a !== first && a !== second);
+  if (!first) first = rest.shift() ?? null;
+  if (!second) second = rest.shift() ?? null;
+  return [first, second];
+}
+
 // Only submitted annotations count — an in-progress annotation isn't a label yet.
 export async function loadCorpus(): Promise<CorpusTrial[]> {
   const [trials, annotations, adjudications] = await Promise.all([
@@ -102,7 +123,12 @@ export async function loadCorpus(): Promise<CorpusTrial[]> {
     annByTrial.set(a.nct_id, list);
   }
   const adjByTrial = new Map<string, CorpusTrial['adjudications']>();
+  const mapByTrial = new Map<string, CohortMap>();
   for (const d of adjudications) {
+    if (d.field_key === COHORT_MAP_FIELD && d.cohort_key === TRIAL_LEVEL_SENTINEL) {
+      mapByTrial.set(d.nct_id, (d.final_value?.v ?? {}) as unknown as CohortMap);
+      continue;
+    }
     const m = adjByTrial.get(d.nct_id) ?? new Map();
     m.set(adjudicationKey(d.cohort_key, d.cancer_type, d.field_key), {
       value: d.final_value?.v ?? null, decidedBy: d.decided_by_name, decidedAt: d.decided_at,
@@ -111,12 +137,7 @@ export async function loadCorpus(): Promise<CorpusTrial[]> {
   }
 
   return trials.map((t) => {
-    const anns = annByTrial.get(t.nct_id) ?? [];
-    let first = anns.find((a) => a.expert_slot !== null && a.expert_slot === t.annotator_slot_1) ?? null;
-    let second = anns.find((a) => a !== first && a.expert_slot !== null && a.expert_slot === t.annotator_slot_2) ?? null;
-    const rest = anns.filter((a) => a !== first && a !== second);
-    if (!first) first = rest.shift() ?? null;
-    if (!second) second = rest.shift() ?? null;
+    const [first, second] = orderBySlot(annByTrial.get(t.nct_id) ?? [], t.annotator_slot_1, t.annotator_slot_2);
 
     const toCorpus = (a: AnnotationDbRow | null): CorpusAnnotation | null => a && {
       expertName: a.expert_name,
@@ -133,6 +154,7 @@ export async function loadCorpus(): Promise<CorpusTrial[]> {
       annotator1: toCorpus(first),
       annotator2: toCorpus(second),
       adjudications: adjByTrial.get(t.nct_id) ?? new Map(),
+      cohortMap: mapByTrial.get(t.nct_id) ?? null,
     };
   });
 }
@@ -153,7 +175,8 @@ export interface FieldRow {
 }
 
 // Re-uses the comparison builder with a single side so a single annotation
-// flattens into exactly the same rows (and field order) as the adjudicated export.
+// flattens into exactly the same rows (and field order) as the adjudicated
+// export, normalized the same way (blank rules, derived trial level).
 export function flattenAnnotation(answers: TrialAnswers): FieldRow[] {
   return buildComparisonRows(answers, undefined)
     .filter((r) => r.scope !== 'cohort_existence')
@@ -175,7 +198,7 @@ export function flattenAnnotation(answers: TrialAnswers): FieldRow[] {
 
 export interface MergedRow extends FieldRow {
   source: FieldSource;
-  annotator1Value: FieldValue;
+  annotator1Value: FieldValue;   // as entered
   annotator2Value: FieldValue;
   decidedBy: string | null;
   decidedAt: string | null;
@@ -185,6 +208,7 @@ export interface MergedTrial {
   answers: TrialAnswers;
   rows: MergedRow[];
   unresolved: { cohortKey: string; cancerType: string; fieldKey: string }[];
+  autoResolvedCount: number;
 }
 
 export function mergeAdjudicated(trial: CorpusTrial): MergedTrial | null {
@@ -192,95 +216,61 @@ export function mergeAdjudicated(trial: CorpusTrial): MergedTrial | null {
   const b = trial.annotator2?.answers;
   if (!a && !b) return null;
 
-  const comparison = buildComparisonRows(a, b);
-  const rows: MergedRow[] = comparison.map((r) => {
-    const adj = trial.adjudications.get(adjudicationKey(r.cohortKey, r.cancerType, r.fieldKey));
-    let source: FieldSource;
-    let value: FieldValue;
-    if (adj) { source = 'adjudicated'; value = adj.value; }
-    else if (!a || !b) { source = 'single_annotator'; value = a ? r.a : r.b; }
-    else if (r.agree) { source = 'agreed'; value = r.a; }
-    else { source = 'unresolved'; value = null; }
+  const decided = (key: string) => trial.adjudications.get(key)?.value;
+  const r = resolveRows(buildComparisonRows(a, b, trial.cohortMap), !!a, !!b, (key) =>
+    trial.adjudications.has(key) ? (decided(key) ?? null) : undefined);
+
+  const rows: MergedRow[] = r.rows.map((row) => {
+    const adj = trial.adjudications.get(adjudicationKey(row.cohortKey, row.cancerType, row.fieldKey));
     return {
-      scope: r.scope,
-      cohortKey: r.cohortKey,
-      cohortDisplayName: r.cohortDisplayName ?? '',
-      cancerType: r.cancerType,
-      fieldKey: r.fieldKey,
-      fieldClass: r.def.class,
-      fieldKind: r.def.kind,
-      value,
-      source,
-      annotator1Value: r.a,
-      annotator2Value: r.b,
-      decidedBy: adj?.decidedBy ?? null,
-      decidedAt: adj?.decidedAt ?? null,
+      scope: row.scope,
+      cohortKey: row.cohortKey,
+      cohortDisplayName: row.cohortDisplayName ?? '',
+      cancerType: row.cancerType,
+      fieldKey: row.fieldKey,
+      fieldClass: row.def.class,
+      fieldKind: row.def.kind,
+      value: row.value,
+      source: row.source,
+      annotator1Value: row.rawA,
+      annotator2Value: row.rawB,
+      decidedBy: row.source === 'adjudicated' ? adj?.decidedBy ?? null : null,
+      decidedAt: row.source === 'adjudicated' ? adj?.decidedAt ?? null : null,
     };
   });
-
-  // A cohort is dropped only when its existence was explicitly decided false.
-  // An unresolved existence keeps the cohort (it's flagged in `unresolved`).
-  const dropped = new Set(
-    rows.filter((r) => r.scope === 'cohort_existence' && r.source === 'adjudicated' && r.value === false)
-      .map((r) => r.cohortKey),
-  );
-  const kept = rows.filter((r) => r.scope === 'trial' || r.scope === 'cohort_existence' || !dropped.has(r.cohortKey));
-
-  const trialValue = (fk: string) =>
-    kept.find((r) => r.scope === 'trial' && r.fieldKey === fk)?.value ?? null;
-
-  const cohortsByKey = new Map<string, Cohort>();
-  const sourceCohorts = new Map<string, Cohort>();
-  for (const c of [...(a?.cohorts ?? []), ...(b?.cohorts ?? [])]) {
-    if (!sourceCohorts.has(c.cohortKey)) sourceCohorts.set(c.cohortKey, c);
-  }
-  for (const r of kept) {
-    if (r.scope === 'trial' || r.scope === 'cohort_existence') continue;
-    let c = cohortsByKey.get(r.cohortKey);
-    if (!c) {
-      c = {
-        cohortKey: r.cohortKey,
-        displayName: r.cohortDisplayName,
-        applicableCancerTypes: {},
-        minAge: null, maxAge: null, ecogMin: null, ecogMax: null,
-      };
-      cohortsByKey.set(r.cohortKey, c);
-    }
-    if (r.scope === 'cohort') {
-      (c as unknown as Record<string, FieldValue>)[r.fieldKey] = r.value;
-    } else {
-      const ct = r.cancerType as CancerType;
-      const block: BlockAnswers = c.applicableCancerTypes[ct] ?? {};
-      block[r.fieldKey] = r.value;
-      c.applicableCancerTypes[ct] = block;
-    }
-  }
-  // Cancer types with no descriptor fields (OTHER) never produce rows above —
-  // carry them over from whichever annotator listed them.
-  for (const [key, src] of sourceCohorts) {
-    if (dropped.has(key)) continue;
-    const c = cohortsByKey.get(key);
-    if (!c) continue;
-    for (const ct of Object.keys(src.applicableCancerTypes ?? {}) as CancerType[]) {
-      if (!c.applicableCancerTypes[ct]) c.applicableCancerTypes[ct] = {};
-    }
-  }
 
   return {
     answers: {
       nctId: trial.nctId,
       expertId: null,
-      cancerTypes: (trialValue('cancerTypes') as CancerType[] | null) ?? [],
-      minAge: trialValue('minAge') as number | null,
-      maxAge: trialValue('maxAge') as number | null,
-      ecogMin: trialValue('ecogMin') as number | null,
-      ecogMax: trialValue('ecogMax') as number | null,
-      cohorts: [...cohortsByKey.values()],
+      ...r.trial,
+      cohorts: r.cohorts,
     },
-    rows: kept,
-    unresolved: kept
-      .filter((r) => r.source === 'unresolved')
-      .map((r) => ({ cohortKey: r.cohortKey, cancerType: r.cancerType, fieldKey: r.fieldKey })),
+    rows,
+    unresolved: r.unresolved.map((u) => ({ cohortKey: u.cohortKey, cancerType: u.cancerType, fieldKey: u.fieldKey })),
+    autoResolvedCount: r.autoResolved.length,
+  };
+}
+
+export type AdjudicationState = 'waiting' | 'open' | 'done';
+
+export interface AdjudicationStatus {
+  state: AdjudicationState;
+  open: number;          // decisions still needed
+  autoResolved: number;  // differences resolved without a decision
+  decided: number;       // reviewer decisions on the current label
+}
+
+// Where a trial stands in adjudication. "waiting" until both annotations are submitted.
+export function adjudicationStatus(trial: CorpusTrial): AdjudicationStatus {
+  if (!trial.annotator1 || !trial.annotator2) return { state: 'waiting', open: 0, autoResolved: 0, decided: 0 };
+  const merged = mergeAdjudicated(trial)!;
+  const open = merged.unresolved.length;
+  return {
+    state: open > 0 ? 'open' : 'done',
+    open,
+    autoResolved: merged.autoResolvedCount,
+    decided: merged.rows.filter((r) => r.source === 'adjudicated').length,
   };
 }
 
@@ -289,4 +279,3 @@ export function valueToCell(v: FieldValue): string {
   if (Array.isArray(v)) return v.join('|');
   return String(v);
 }
-

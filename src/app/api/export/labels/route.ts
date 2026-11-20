@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readSession } from '@/lib/auth';
 import { rowsToCsv } from '@/lib/csv';
-import { COHORT_EXISTS_FIELD } from '@/lib/adjudication-rows';
+import { COHORT_EXISTS_FIELD, COHORT_TYPES_FIELD, normalizeAnswers } from '@/lib/adjudication-rows';
 import {
   CorpusTrial, FieldRow, LabelSource, flattenAnnotation, loadCorpus, mergeAdjudicated, valueToCell,
 } from '@/lib/labels-export';
@@ -23,7 +23,7 @@ function locationCells(r: FieldRow): string[] {
     r.cohortKey === TRIAL_LEVEL_SENTINEL ? '' : r.cohortKey,
     r.cohortKey === TRIAL_LEVEL_SENTINEL ? '' : r.cohortDisplayName,
     r.cancerType === TRIAL_LEVEL_SENTINEL ? '' : r.cancerType,
-    r.fieldKey === COHORT_EXISTS_FIELD ? 'cohort_exists' : r.fieldKey,
+    r.fieldKey === COHORT_EXISTS_FIELD ? 'cohort_exists' : r.fieldKey === COHORT_TYPES_FIELD ? 'cancer_types' : r.fieldKey,
     r.fieldClass,
     r.fieldKind,
   ];
@@ -42,7 +42,9 @@ function annotatorExport(trials: CorpusTrial[], source: 'annotator1' | 'annotato
           expertName: ann?.expertName ?? null,
           submittedAt: ann?.submittedAt ?? null,
           notes: ann?.notes ?? null,
-          labels: ann?.answers ?? null,
+          // Same normalization as the adjudicated label: blank rules applied,
+          // trial-level fields derived from the cohorts.
+          labels: ann ? normalizeAnswers(ann.answers) : null,
         };
       }),
     };

@@ -1302,7 +1302,7 @@ const plasma_cell: BlockDef = (() => {
         PCL: 'Plasma cell leukemia.',
         PLASMACYTOMA: 'Solitary plasmacytoma.',
         AL_AMYLOIDOSIS: 'AL (light-chain) amyloidosis.',
-        WALDENSTROM_LPL: 'Waldenström macroglobulinemia / lymphoplasmacytic lymphoma.',
+        WALDENSTROM_LPL: 'Waldenström macroglobulinemia / lymphoplasmacytic lymphoma, only when the trial also enrolls a plasma cell disorder; a Waldenström-only trial goes under Mature B-cell.',
         POEMS: 'POEMS syndrome.',
         OTHER: 'Other plasma cell neoplasm.',
       }, class: 'accepted_diseases' },

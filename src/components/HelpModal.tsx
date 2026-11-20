@@ -43,8 +43,10 @@ export function HelpModal({ storageKey }: Props) {
             <ol className="space-y-3 text-sm text-slate-700">
               <Step n={1}>
                 <strong>Label each trial blind.</strong> Read the trial text on the
-                left. Fill in every field on the right from the eligibility text alone
-                — don&apos;t infer from the drug name or sponsor.
+                left. Fill in the fields from the eligibility criteria first; use the
+                conditions, summary, description, arms and official title only where
+                the criteria are ambiguous. Don&apos;t infer from outside knowledge of
+                the drug or sponsor.
               </Step>
               <Step n={2}>
                 <strong>`null` means the trial doesn&apos;t constrain that field.</strong>
@@ -53,7 +55,9 @@ export function HelpModal({ storageKey }: Props) {
               </Step>
               <Step n={3}>
                 <strong>Multi-select chips — pick every value the trial accepts.</strong>
-                If the trial enrolls both stage I and stage II, click both.
+                If the trial enrolls both stage I and stage II, click both. If it accepts
+                essentially every value (no restriction), leave the field blank instead
+                of ticking them all.
               </Step>
               <Step n={4}>
                 <strong>Booleans:</strong>{' '}
@@ -70,8 +74,9 @@ export function HelpModal({ storageKey }: Props) {
                 flags&quot; box and pick your best single interpretation.
               </Step>
               <Step n={7}>
-                <strong>Click &quot;Mark complete&quot; when done.</strong> All trials must be
-                marked complete before you can submit the test. Edits auto-save.
+                <strong>Click &quot;Mark complete&quot; when done.</strong> This submits and
+                locks your answers; &quot;Unlock to edit&quot; reopens them if you need to
+                correct something. Edits auto-save.
               </Step>
             </ol>
 
