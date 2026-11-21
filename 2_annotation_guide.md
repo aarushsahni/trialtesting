@@ -1,3 +1,5 @@
+> **Superseded.** This copy is out of date. The labeling app's guide is the live guide at /guide (repo copy: src/lib/annotation-guide.md); tempo-optimization's TRIAL_SCHEMAS is kept in sync with src/lib/schema/field-schemas.ts by `npm run check-schema-sync` there.
+
 # TEMPO — Physician Annotation Guide
 
 **Purpose.** This guide is for trained physician annotators performing **manual structured extraction** of trial eligibility criteria from ClinicalTrials.gov, to serve as the reference standard against which TEMPO's automated extraction is compared.

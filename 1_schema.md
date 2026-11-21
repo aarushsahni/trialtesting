@@ -1,3 +1,5 @@
+> **Superseded.** This copy is out of date. The labeling app's schema is src/lib/schema/field-schemas.ts; tempo-optimization's TRIAL_SCHEMAS is kept in sync with src/lib/schema/field-schemas.ts by `npm run check-schema-sync` there.
+
 # TEMPO Cancer-Type Schema
 
 Structured eligibility-variable schema extracted per cancer type from ClinicalTrials.gov
