@@ -6,6 +6,7 @@
 //      from its header row) with its structural rows (keep the cohort, its
 //      cancer types), its bounds, and its fields grouped by cancer type. Open
 //      rows show quick picks; any other row can be clicked to change it.
+//      Cohorts the adjudicator added come last, every field filled in by hand.
 //   2. The adjudicator's note explaining their reasoning for the trial.
 //   3. Collapsed: each annotator's full annotation, cohorts side by side.
 //
@@ -16,18 +17,22 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  adjudicateFieldAction, adjudicateFieldsAction, clearAdjudicationAction, setAdjudicationCohortMapAction,
-  setAdjudicationNoteAction,
+  addCohortAction, adjudicateFieldAction, adjudicateFieldsAction, clearAdjudicationAction, removeAddedCohortAction,
+  setAdjudicationCohortMapAction, setAdjudicationNoteAction, updateAddedCohortAction,
 } from '@/app/actions/adjudication';
 import { EligibilityText } from '@/components/EligibilityText';
 import { FieldEditor } from '@/components/FieldEditor';
 import { Tooltip } from '@/components/Tooltip';
 import {
-  COHORT_EXISTS_FIELD, COHORT_TYPES_FIELD, CohortMap, CohortPair, ComparisonRow, ResolvedRow,
-  adjudicationKey, buildComparisonRows, cohortMapOf, normValue, pairsFor, resolveRows,
+  AddedCohort, COHORT_EXISTS_FIELD, COHORT_LEVEL_DEFS, COHORT_TYPES_DEF, COHORT_TYPES_FIELD, CohortMap, CohortPair,
+  ComparisonRow, ResolvedRow, TrialLevel, adjudicationKey, buildComparisonRows, cohortMapOf, normValue,
+  normalizeFieldValue, pairsFor, resolveRows,
 } from '@/lib/adjudication-rows';
 import { BLOCKS } from '@/lib/schema/field-schemas';
-import { ALL_CANCER_TYPES, CANCER_TYPE_LABELS, CANCER_TYPE_DEFINITIONS, Cohort, FieldValue, TrialAnswers } from '@/lib/types';
+import {
+  ALL_CANCER_TYPES, CANCER_TYPE_LABELS, CANCER_TYPE_DEFINITIONS, CancerType, Cohort, FieldValue, TRIAL_LEVEL_SENTINEL,
+  TrialAnswers,
+} from '@/lib/types';
 
 interface ReviewSummary {
   answers: TrialAnswers;
@@ -49,6 +54,7 @@ interface Props {
   reviews: ReviewSummary[];
   initialAdjudications: Record<string, unknown>;
   initialCohortMap: CohortMap | null;
+  initialAddedCohorts: AddedCohort[];
   initialNote: string;
   initialNoteSavedAt: string | null;
 }
@@ -71,6 +77,7 @@ function isBlank(v: FieldValue | undefined) {
 interface QuickPick { id: string; label: string; shortcut: string; value: FieldValue }
 
 function quickPicks(row: ComparisonRow, names: Names): QuickPick[] {
+  if (row.added) return []; // nothing to pick from — set with the field editor
   if (row.fieldKey === COHORT_EXISTS_FIELD) {
     const keepLabel = row.a ? `Keep (${names[0]})` : `Keep (${names[1]})`;
     return [
@@ -144,6 +151,7 @@ function statusOf(res: ResolvedRow | undefined, names: Names): { label: string; 
   switch (res.source) {
     case 'unresolved': return { label: 'Open', tone: 'open' };
     case 'adjudicated': return { label: 'Decided', tone: 'decided' };
+    case 'added': return res.fieldKey === COHORT_TYPES_FIELD ? { label: 'Added', tone: 'auto' } : { label: 'Not set', tone: 'muted' };
     case 'derived': return { label: 'Derived', tone: 'auto' };
     case 'single_annotator': return { label: 'Single annotator', tone: 'agreed' };
     case 'one_sided': return { label: `Only ${res.oneSided === 'a' ? names[0] : names[1]}`, tone: 'auto' };
@@ -170,10 +178,14 @@ const cohortTypes = (c?: Cohort) => sortedTypes(Object.keys(c?.applicableCancerT
 // ──────────────────────────────────────────────────────────────────────────
 
 export function AdjudicationView({
-  sessionName, trial, reviews, initialAdjudications, initialCohortMap, initialNote, initialNoteSavedAt,
+  sessionName, trial, reviews, initialAdjudications, initialCohortMap, initialAddedCohorts, initialNote,
+  initialNoteSavedAt,
 }: Props) {
   const [finals, setFinals] = useState<Record<string, FieldValue>>(initialAdjudications as Record<string, FieldValue>);
   const [cohortMap, setCohortMap] = useState<CohortMap | null>(initialCohortMap);
+  const [addedCohorts, setAddedCohorts] = useState<AddedCohort[]>(initialAddedCohorts);
+  const [addingCohort, setAddingCohort] = useState(false);
+  const [editingCohort, setEditingCohort] = useState<string | null>(null);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [hideBlank, setHideBlank] = useState(true);
@@ -189,10 +201,10 @@ export function AdjudicationView({
   const short: Names = ['A', 'B'];
 
   const pairs = useMemo(() => pairsFor(A, B, cohortMap), [A, B, cohortMap]);
-  const rows = useMemo(() => buildComparisonRows(A, B, cohortMap), [A, B, cohortMap]);
+  const rows = useMemo(() => buildComparisonRows(A, B, cohortMap, addedCohorts), [A, B, cohortMap, addedCohorts]);
   const resolved = useMemo(
-    () => resolveRows(rows, !!A, !!B, (k) => (k in finals ? finals[k] : undefined)),
-    [rows, A, B, finals],
+    () => resolveRows(rows, !!A, !!B, (k) => (k in finals ? finals[k] : undefined), addedCohorts),
+    [rows, A, B, finals, addedCohorts],
   );
   const resolvedByKey = useMemo(() => new Map(resolved.rows.map((r) => [keyOf(r), r])), [resolved]);
 
@@ -280,9 +292,50 @@ export function AdjudicationView({
     void savePairing(map);
   }
 
+  async function addCohort(form: CohortFormValue): Promise<string | null> {
+    const result = await addCohortAction({ nctId: trial.nctId, ...form });
+    if (!result.ok || !result.cohort) return result.error ?? 'Could not add the cohort.';
+    const cohort = result.cohort;
+    const saved: Record<string, FieldValue> = {};
+    for (const [fk, v] of Object.entries(form.bounds)) {
+      if (!isBlank(v)) saved[adjudicationKey(cohort.cohortKey, TRIAL_LEVEL_SENTINEL, fk)] = v;
+    }
+    setAddedCohorts((cs) => [...cs, cohort]);
+    setFinals((f) => ({ ...f, ...saved }));
+    setAddingCohort(false);
+    // Start on the new cohort's first field.
+    const ct = cohort.cancerTypes.find((t) => Object.keys(BLOCKS[t]?.fields ?? {}).length > 0);
+    if (ct) setActiveKey(adjudicationKey(cohort.cohortKey, ct, Object.keys(BLOCKS[ct].fields)[0]));
+    return null;
+  }
+
+  async function updateCohort(cohortKey: string, form: CohortFormValue): Promise<string | null> {
+    const { displayName, cancerTypes } = form;
+    const result = await updateAddedCohortAction({ nctId: trial.nctId, cohortKey, displayName, cancerTypes });
+    if (!result.ok) return result.error ?? 'Could not save the cohort.';
+    setAddedCohorts((cs) => cs.map((c) => c.cohortKey === cohortKey ? { ...c, displayName, cancerTypes } : c));
+    setEditingCohort(null);
+    return null;
+  }
+
+  async function removeCohort(c: AddedCohort) {
+    const prefix = `${c.cohortKey}|`;
+    const n = Object.keys(finals).filter((k) => k.startsWith(prefix)).length;
+    const values = n > 0 ? ` and the ${n} value${n === 1 ? '' : 's'} saved in it` : '';
+    if (!window.confirm(`Remove the cohort "${c.displayName}"${values}? This can't be undone.`)) return;
+    setErr(null);
+    const result = await removeAddedCohortAction({ nctId: trial.nctId, cohortKey: c.cohortKey });
+    if (!result.ok) { setErr(result.error ?? 'Failed to remove the cohort'); return; }
+    setAddedCohorts((cs) => cs.filter((x) => x.cohortKey !== c.cohortKey));
+    setFinals((f) => Object.fromEntries(Object.entries(f).filter(([k]) => !k.startsWith(prefix))));
+    if (activeKey?.startsWith(prefix)) setActiveKey(null);
+  }
+
   // A row can be decided when both annotations exist and the row is on the
   // final label (not trial level, not in a dropped cohort or excluded type).
-  const canDecide = (r: ComparisonRow) => hasBoth && r.scope !== 'trial' && resolvedByKey.has(keyOf(r));
+  // An added cohort's cancer types are changed with its Edit button instead.
+  const canDecide = (r: ComparisonRow) =>
+    hasBoth && r.scope !== 'trial' && !(r.added && r.fieldKey === COHORT_TYPES_FIELD) && resolvedByKey.has(keyOf(r));
 
   // Keyboard: J/K move between decisions; 1/2/U/O/0 pick on the active row.
   useEffect(() => {
@@ -311,8 +364,9 @@ export function AdjudicationView({
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  // Toggles never hide an open decision or the row being worked on.
+  // Toggles never hide an open decision, the row being worked on or an added cohort.
   const isVisible = (r: ComparisonRow) => {
+    if (r.added) return true;
     const k = keyOf(r);
     const res = resolvedByKey.get(k);
     if (res?.source === 'unresolved' || k === activeKey || k in finals) return true;
@@ -334,7 +388,7 @@ export function AdjudicationView({
         isDecided={k in finals}
         canDecide={canDecide(r)}
         onActivate={() => setActiveKey(k)}
-        onPick={(v) => decide([{ row: r, value: v }], k)}
+        onPick={(v) => decide([{ row: r, value: v }], r.added ? undefined : k)}
         onClear={() => clear(r)}
         rowRef={(el) => { if (el) rowRefs.current.set(k, el); else rowRefs.current.delete(k); }}
       />
@@ -440,6 +494,59 @@ export function AdjudicationView({
             })}
           </>
         )}
+      </Fragment>
+    );
+  };
+
+  const renderAdded = (c: AddedCohort, idx: number) => {
+    const cohortRows = rowsByPair.get(c.cohortKey) ?? [];
+    const linkCls = 'text-[11px] hover:underline';
+    return (
+      <Fragment key={c.cohortKey}>
+        <tr>
+          <td className={hdrCell}>
+            <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Cohort {pairs.length + idx + 1}</div>
+            <div className="text-[11px] text-slate-500">added by adjudicator</div>
+          </td>
+          <td colSpan={2} className={`${hdrCell} border-l border-l-slate-200`}>
+            <span className="font-semibold text-slate-900">{c.displayName}</span>
+          </td>
+          <td className={`${hdrCell} border-l border-l-slate-200 text-xs`}>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setEditingCohort(editingCohort === c.cohortKey ? null : c.cohortKey)}
+                className={`${linkCls} text-blue-600`}
+              >
+                Edit name / cancer types
+              </button>
+              <button onClick={() => removeCohort(c)} className={`${linkCls} text-red-600`}>Remove</button>
+            </div>
+          </td>
+        </tr>
+        {editingCohort === c.cohortKey && (
+          <tr>
+            <td colSpan={4} className="px-3 py-3 border-t border-slate-200 bg-blue-50/40">
+              <CohortForm
+                initial={c}
+                submitLabel="Save cohort"
+                onSubmit={(form) => updateCohort(c.cohortKey, form)}
+                onCancel={() => setEditingCohort(null)}
+              />
+            </td>
+          </tr>
+        )}
+        {cohortRows.filter((r) => r.scope === 'cohort')
+          .map((r) => renderRow(r, r.fieldKey === COHORT_TYPES_FIELD ? 'Cancer types' : undefined))}
+        {c.cancerTypes.map((ct) => (
+          <Fragment key={ct}>
+            <tr>
+              <td className={`${subCell} font-semibold text-slate-800`}>{CANCER_TYPE_LABELS[ct] ?? ct}</td>
+              <td colSpan={2} className={`${subCell} border-l border-l-slate-200 text-slate-400 italic`}>not in either annotation</td>
+              <td className={`${subCell} border-l border-l-slate-200 text-slate-600`}>On label</td>
+            </tr>
+            {cohortRows.filter((r) => r.scope === 'descriptor' && r.cancerType === ct).map((r) => renderRow(r))}
+          </Fragment>
+        ))}
       </Fragment>
     );
   };
@@ -596,9 +703,33 @@ export function AdjudicationView({
                 </tr>
                 {trialRows.map((r) => renderRow(r))}
                 {pairs.map(renderPair)}
+                {addedCohorts.map(renderAdded)}
               </tbody>
             </table>
           </div>
+
+          {hasBoth && (addingCohort ? (
+            <div className="bg-white border border-slate-200 rounded-2xl p-4">
+              <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">Add a cohort</div>
+              <p className="text-xs text-slate-500 mb-3">
+                For a cohort neither annotator drew. Age and ECOG start from the trial level; every other field starts
+                blank and is filled in on the table above.
+              </p>
+              <CohortForm
+                trialLevel={resolved.trial}
+                submitLabel="Add cohort"
+                onSubmit={addCohort}
+                onCancel={() => setAddingCohort(false)}
+              />
+            </div>
+          ) : (
+            <button
+              onClick={() => setAddingCohort(true)}
+              className="w-full px-4 py-2.5 border border-dashed border-slate-300 rounded-2xl text-sm text-slate-600 bg-white hover:border-blue-400 hover:text-blue-700 transition"
+            >
+              + Add cohort
+            </button>
+          ))}
 
           {hasBoth && openCount === 0 && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-sm text-emerald-900 flex items-center justify-between gap-3">
@@ -631,6 +762,7 @@ function SideValue({ row, side }: { row: ComparisonRow; side: 0 | 1 }) {
   const raw = side === 0 ? row.rawA : row.rawB;
   const other = side === 0 ? row.b : row.a;
   const help = row.def.optionHelp;
+  if (row.added) return <span className="text-slate-300" title="Not in either annotation">—</span>;
   if (row.fieldKey === COHORT_EXISTS_FIELD) {
     return v ? <span className="text-slate-800">Drew this cohort</span> : <span className="text-slate-400 italic">No such cohort</span>;
   }
@@ -686,6 +818,10 @@ function CompareRow({
   const picks = canDecide && (open || active) ? quickPicks(row, names) : [];
   const td = 'px-3 py-2 align-top border-t border-slate-100';
   const stop = (e: React.MouseEvent) => e.stopPropagation();
+  // An added cohort's fields have no picks: the editor is open while the row is
+  // active, and stays open while it holds a value that hasn't been saved.
+  const unsaved = !!row.added && canDecide && normValue(customValue) !== normValue(res?.value ?? null);
+  const editorOpen = row.added ? canDecide && (active || unsaved) : showCustom;
 
   const finalValue = !res || open ? null
     : isExists ? <span className="font-medium text-slate-800">{res.value ? 'Kept' : 'Dropped'}</span>
@@ -708,7 +844,7 @@ function CompareRow({
             <Badge {...status} />
             {finalValue}
             {isDecided && canDecide && (
-              <button onClick={(e) => { stop(e); onClear(); }} className="text-[11px] text-red-600 hover:underline ml-auto">Clear</button>
+              <button onClick={(e) => { stop(e); onClear(); if (row.added) setCustomValue(null); }} className="text-[11px] text-red-600 hover:underline ml-auto">Clear</button>
             )}
           </div>
           {picks.length > 0 && (
@@ -729,20 +865,105 @@ function CompareRow({
               )}
             </div>
           )}
-          {showCustom && (
+          {editorOpen && (
             <div className="border-t border-slate-200 pt-1" onClick={stop}>
               <FieldEditor def={row.def} value={customValue} onChange={setCustomValue} />
               <button
-                onClick={() => { onPick(customValue); setShowCustom(false); }}
+                onClick={() => {
+                  const v = row.added ? normalizeFieldValue(row.cancerType, row.fieldKey, customValue) : customValue;
+                  setCustomValue(v);
+                  onPick(v);
+                  setShowCustom(false);
+                }}
                 className="text-xs px-3 py-1.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition"
               >
                 Use as final
               </button>
+              {unsaved && <span className="ml-2 text-[11px] text-amber-700">Unsaved</span>}
             </div>
           )}
         </div>
       </td>
     </tr>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Adding / editing a cohort
+// ──────────────────────────────────────────────────────────────────────────
+
+interface CohortFormValue { displayName: string; cancerTypes: CancerType[]; bounds: Record<string, FieldValue> }
+
+// With `trialLevel` (adding), also asks for the cohort's age / ECOG bounds.
+function CohortForm({
+  initial, trialLevel, submitLabel, onSubmit, onCancel,
+}: {
+  initial?: AddedCohort;
+  trialLevel?: TrialLevel;
+  submitLabel: string;
+  onSubmit: (form: CohortFormValue) => Promise<string | null>; // error message, or null when saved
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(initial?.displayName ?? '');
+  const [types, setTypes] = useState<CancerType[]>(
+    initial?.cancerTypes ?? (trialLevel?.cancerTypes.length === 1 ? trialLevel.cancerTypes : []),
+  );
+  const [bounds, setBounds] = useState<Record<string, FieldValue>>(trialLevel
+    ? { minAge: trialLevel.minAge, maxAge: trialLevel.maxAge, ecogMin: trialLevel.ecogMin, ecogMax: trialLevel.ecogMax }
+    : {});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ready = name.trim() !== '' && types.length > 0;
+
+  async function submit() {
+    if (!ready || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setError(await onSubmit({ displayName: name.trim(), cancerTypes: types, bounds }));
+    } catch {
+      setError('Could not save the cohort.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+      <label className="block text-sm font-medium text-slate-800">
+        Cohort name
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={200}
+          autoFocus
+          className="mt-1.5 block w-full font-normal text-sm border border-slate-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+        />
+      </label>
+      <div className="mt-2">
+        <FieldEditor def={COHORT_TYPES_DEF} value={types} onChange={(v) => setTypes((v as CancerType[] | null) ?? [])} />
+      </div>
+      {trialLevel && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4">
+          {Object.entries(COHORT_LEVEL_DEFS).map(([fk, def]) => (
+            <div key={fk}>
+              <FieldEditor def={def} value={bounds[fk] ?? null} onChange={(v) => setBounds((b) => ({ ...b, [fk]: v }))} />
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-2 flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={!ready || busy}
+          className="text-xs px-3 py-1.5 rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-500 transition"
+        >
+          {busy ? 'Saving…' : submitLabel}
+        </button>
+        <button type="button" onClick={onCancel} className="text-xs text-slate-600 hover:underline">Cancel</button>
+        {error && <span className="text-xs text-red-700">{error}</span>}
+      </div>
+    </form>
   );
 }
 

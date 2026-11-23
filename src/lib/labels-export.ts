@@ -16,10 +16,12 @@
 //                      annotator has; it takes that annotator's value
 //   unresolved       — the annotators disagree and nobody has decided (value null)
 //   derived          — trial-level fields, computed from the final cohorts
+//   added            — in a cohort the reviewer added; blank until decided
 
 import { query } from './db';
 import {
-  ADJUDICATION_NOTE_FIELD, COHORT_MAP_FIELD, CohortMap, FieldSource, adjudicationKey, buildComparisonRows, resolveRows,
+  ADDED_COHORT_FIELD, ADJUDICATION_NOTE_FIELD, AddedCohort, COHORT_MAP_FIELD, COHORT_TYPES_FIELD, CohortMap,
+  FieldSource, addedCohortsFrom, adjudicationKey, buildComparisonRows, resolveRows,
 } from './adjudication-rows';
 import { FieldValue, TRIAL_LEVEL_SENTINEL, TrialAnswers } from './types';
 
@@ -43,6 +45,7 @@ export interface CorpusTrial {
   adjudications: Map<string, { value: FieldValue; decidedBy: string | null; decidedAt: string }>;
   cohortMap: CohortMap | null;   // reviewer-saved cohort pairing, if any
   adjudicatorNote: string | null; // reviewer's explanation of their decisions
+  addedCohorts: AddedCohort[];   // cohorts the reviewer added
 }
 
 interface TrialDbRow {
@@ -126,7 +129,9 @@ export async function loadCorpus(): Promise<CorpusTrial[]> {
   const adjByTrial = new Map<string, CorpusTrial['adjudications']>();
   const mapByTrial = new Map<string, CohortMap>();
   const noteByTrial = new Map<string, string>();
+  const rowsByTrial = new Map<string, AdjudicationDbRow[]>();
   for (const d of adjudications) {
+    rowsByTrial.set(d.nct_id, [...(rowsByTrial.get(d.nct_id) ?? []), d]);
     if (d.field_key === COHORT_MAP_FIELD && d.cohort_key === TRIAL_LEVEL_SENTINEL) {
       mapByTrial.set(d.nct_id, (d.final_value?.v ?? {}) as unknown as CohortMap);
       continue;
@@ -162,6 +167,7 @@ export async function loadCorpus(): Promise<CorpusTrial[]> {
       adjudications: adjByTrial.get(t.nct_id) ?? new Map(),
       cohortMap: mapByTrial.get(t.nct_id) ?? null,
       adjudicatorNote: noteByTrial.get(t.nct_id) ?? null,
+      addedCohorts: addedCohortsFrom(rowsByTrial.get(t.nct_id) ?? []),
     };
   });
 }
@@ -224,11 +230,16 @@ export function mergeAdjudicated(trial: CorpusTrial): MergedTrial | null {
   if (!a && !b) return null;
 
   const decided = (key: string) => trial.adjudications.get(key)?.value;
-  const r = resolveRows(buildComparisonRows(a, b, trial.cohortMap), !!a, !!b, (key) =>
-    trial.adjudications.has(key) ? (decided(key) ?? null) : undefined);
+  const r = resolveRows(buildComparisonRows(a, b, trial.cohortMap, trial.addedCohorts), !!a, !!b, (key) =>
+    trial.adjudications.has(key) ? (decided(key) ?? null) : undefined, trial.addedCohorts);
 
   const rows: MergedRow[] = r.rows.map((row) => {
-    const adj = trial.adjudications.get(adjudicationKey(row.cohortKey, row.cancerType, row.fieldKey));
+    // The types row of an added cohort is credited to whoever added the cohort.
+    const isAdded = row.added && row.fieldKey === COHORT_TYPES_FIELD;
+    const adj = trial.adjudications.get(
+      adjudicationKey(row.cohortKey, row.cancerType, isAdded ? ADDED_COHORT_FIELD : row.fieldKey),
+    );
+    const byReviewer = row.source === 'adjudicated' || isAdded;
     return {
       scope: row.scope,
       cohortKey: row.cohortKey,
@@ -241,8 +252,8 @@ export function mergeAdjudicated(trial: CorpusTrial): MergedTrial | null {
       source: row.source,
       annotator1Value: row.rawA,
       annotator2Value: row.rawB,
-      decidedBy: row.source === 'adjudicated' ? adj?.decidedBy ?? null : null,
-      decidedAt: row.source === 'adjudicated' ? adj?.decidedAt ?? null : null,
+      decidedBy: byReviewer ? adj?.decidedBy ?? null : null,
+      decidedAt: byReviewer ? adj?.decidedAt ?? null : null,
     };
   });
 
@@ -265,7 +276,7 @@ export interface AdjudicationStatus {
   state: AdjudicationState;
   open: number;          // decisions still needed
   autoResolved: number;  // differences resolved without a decision
-  decided: number;       // reviewer decisions on the current label
+  decided: number;       // reviewer decisions on the current label, plus added cohorts
 }
 
 // Where a trial stands in adjudication. "waiting" until both annotations are submitted.
@@ -277,7 +288,7 @@ export function adjudicationStatus(trial: CorpusTrial): AdjudicationStatus {
     state: open > 0 ? 'open' : 'done',
     open,
     autoResolved: merged.autoResolvedCount,
-    decided: merged.rows.filter((r) => r.source === 'adjudicated').length,
+    decided: merged.rows.filter((r) => r.source === 'adjudicated').length + trial.addedCohorts.length,
   };
 }
 

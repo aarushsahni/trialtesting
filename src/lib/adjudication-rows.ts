@@ -18,6 +18,9 @@
 // the reviewer saved a pairing. A cohort, or a cancer type within a cohort,
 // that only one annotator has needs one decision (keep it or not); its fields
 // then take that annotator's values without further review.
+//
+// A reviewer can also add a cohort neither annotator drew (AddedCohort). Its
+// fields start blank and are filled in with ordinary decisions.
 
 import { BLOCKS } from './schema/field-schemas';
 import { hungarian } from './hungarian';
@@ -45,9 +48,13 @@ export const COHORT_TYPES_FIELD = '__cancer_types__';
 export const COHORT_MAP_FIELD = '__cohort_map__';
 // The adjudicator's free-text explanation for the trial, stored the same way ({v: string}).
 export const ADJUDICATION_NOTE_FIELD = '__adjudication_note__';
+// A cohort added by the reviewer: one row per cohort, under its own cohort key
+// ({v: {displayName, cancerTypes, createdAt}}).
+export const ADDED_COHORT_FIELD = '__added_cohort__';
+export const ADDED_COHORT_PREFIX = 'ADJ:';
 
 const COHORT_EXISTS_DEF: FieldDef = { kind: 'bool', label: 'Cohort belongs on final label', class: 'other' };
-const COHORT_TYPES_DEF: FieldDef = {
+export const COHORT_TYPES_DEF: FieldDef = {
   kind: 'multi', label: 'Cancer types in cohort', options: ALL_CANCER_TYPES,
   optionHelp: CANCER_TYPE_DEFINITIONS, class: 'other',
 };
@@ -59,6 +66,29 @@ export type ComparisonScope = 'trial' | 'cohort' | 'descriptor' | 'cohort_existe
 export type AutoReason = 'blank_rule' | 'inherited' | 'one_sided' | 'derived';
 // annotator-2 cohortKey → annotator-1 cohortKey; '' = deliberately unpaired.
 export type CohortMap = Record<string, string>;
+
+export interface AddedCohort {
+  cohortKey: string;   // ADDED_COHORT_PREFIX + id
+  displayName: string;
+  cancerTypes: CancerType[];
+  createdAt: string;
+}
+
+// The reviewer-added cohorts among a trial's trial_adjudications rows, oldest first.
+export function addedCohortsFrom(rows: { cohort_key: string; field_key: string; final_value: { v: unknown } }[]): AddedCohort[] {
+  return rows
+    .filter((r) => r.field_key === ADDED_COHORT_FIELD)
+    .map((r) => {
+      const v = (r.final_value?.v ?? {}) as Partial<AddedCohort>;
+      return {
+        cohortKey: r.cohort_key,
+        displayName: v.displayName ?? r.cohort_key,
+        cancerTypes: ALL_CANCER_TYPES.filter((ct) => v.cancerTypes?.includes(ct)),
+        createdAt: v.createdAt ?? '',
+      };
+    })
+    .sort((x, y) => x.createdAt.localeCompare(y.createdAt) || x.cohortKey.localeCompare(y.cohortKey));
+}
 
 export interface ComparisonRow {
   cohortKey: string;
@@ -79,6 +109,8 @@ export interface ComparisonRow {
   oneSided?: 'a' | 'b';
   // Why a row whose raw values differ needs no decision.
   autoReason?: AutoReason;
+  // Set on the rows of a reviewer-added cohort.
+  added?: boolean;
 }
 
 // Canonical form for equality: null and [] are the same, arrays are order-insensitive.
@@ -307,6 +339,7 @@ export function buildComparisonRows(
   a: TrialAnswers | undefined,
   b: TrialAnswers | undefined,
   map?: CohortMap | null,
+  added: AddedCohort[] = [],
 ): ComparisonRow[] {
   const both = !!a && !!b;
   const na = a && normalizeAnswers(a);
@@ -393,6 +426,18 @@ export function buildComparisonRows(
       }
     }
   }
+
+  for (const c of added) {
+    const pushAdded = (cancerType: string, scope: ComparisonScope, fieldKey: string, def: FieldDef) => out.push({
+      cohortKey: c.cohortKey, cohortDisplayName: c.displayName, cancerType, scope, fieldKey, def,
+      a: null, b: null, rawA: null, rawB: null, agree: false, needsDecision: false, added: true,
+    });
+    pushAdded(TRIAL_LEVEL_SENTINEL, 'cohort', COHORT_TYPES_FIELD, COHORT_TYPES_DEF);
+    for (const [fk, def] of Object.entries(COHORT_LEVEL_DEFS)) pushAdded(TRIAL_LEVEL_SENTINEL, 'cohort', fk, def);
+    for (const ct of c.cancerTypes) {
+      for (const [fk, def] of Object.entries(BLOCKS[ct]?.fields ?? {})) pushAdded(ct, 'descriptor', fk, def);
+    }
+  }
   return out;
 }
 
@@ -400,7 +445,7 @@ export function buildComparisonRows(
 // Merge with reviewer decisions
 // ──────────────────────────────────────────────────────────────────────────
 
-export type FieldSource = 'adjudicated' | 'agreed' | 'single_annotator' | 'one_sided' | 'unresolved' | 'derived';
+export type FieldSource = 'adjudicated' | 'agreed' | 'single_annotator' | 'one_sided' | 'unresolved' | 'derived' | 'added';
 
 export interface ResolvedRow extends ComparisonRow {
   value: FieldValue;
@@ -416,17 +461,24 @@ export interface ResolvedTrial {
 }
 
 // `decision(key)` returns the reviewer's value for an adjudicationKey, or
-// undefined when nobody has decided.
+// undefined when nobody has decided. `added` must be the cohorts the rows were
+// built with.
 export function resolveRows(
   rows: ComparisonRow[],
   hasA: boolean,
   hasB: boolean,
   decision: (key: string) => FieldValue | undefined,
+  added: AddedCohort[] = [],
 ): ResolvedTrial {
+  const addedTypes = new Map(added.map((c) => [c.cohortKey, c.cancerTypes]));
   const resolved: ResolvedRow[] = rows.map((r) => {
     if (r.scope === 'trial') return { ...r, value: null, source: 'derived' };
+    if (r.added && r.fieldKey === COHORT_TYPES_FIELD) {
+      return { ...r, value: addedTypes.get(r.cohortKey) ?? null, source: 'added' };
+    }
     const d = decision(adjudicationKey(r.cohortKey, r.cancerType, r.fieldKey));
     if (d !== undefined) return { ...r, value: normalizeFieldValue(r.cancerType, r.fieldKey, d), source: 'adjudicated' };
+    if (r.added) return { ...r, value: null, source: 'added' };
     if (!hasA || !hasB) return { ...r, value: hasA ? r.a : r.b, source: 'single_annotator' };
     if (r.agree) return { ...r, value: r.a, source: 'agreed' };
     if (r.oneSided) return { ...r, value: r.oneSided === 'a' ? r.a : r.b, source: 'one_sided' };

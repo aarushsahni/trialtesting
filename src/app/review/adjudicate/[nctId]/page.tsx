@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { readSession } from '@/lib/auth';
 import { query, TrialAdjudicationRow, TrialRow } from '@/lib/db';
-import { ADJUDICATION_NOTE_FIELD, COHORT_MAP_FIELD, CohortMap } from '@/lib/adjudication-rows';
+import { ADDED_COHORT_FIELD, ADJUDICATION_NOTE_FIELD, COHORT_MAP_FIELD, CohortMap, addedCohortsFrom } from '@/lib/adjudication-rows';
 import { orderBySlot } from '@/lib/labels-export';
 import { TRIAL_LEVEL_SENTINEL, TrialAnswers, emptyTrialAnswers } from '@/lib/types';
 import { AdjudicationView } from './AdjudicationView';
@@ -83,10 +83,11 @@ export default async function AdjudicationPage({
         };
       })}
       initialAdjudications={Object.fromEntries(
-        adjudications.filter((a) => !isMapRow(a) && !isNoteRow(a))
+        adjudications.filter((a) => !isMapRow(a) && !isNoteRow(a) && a.field_key !== ADDED_COHORT_FIELD)
           .map((a) => [`${a.cohort_key}|${a.cancer_type}|${a.field_key}`, a.final_value.v]),
       )}
       initialCohortMap={(mapRow?.final_value.v as CohortMap | undefined) ?? null}
+      initialAddedCohorts={addedCohortsFrom(adjudications)}
       initialNote={typeof noteRow?.final_value.v === 'string' ? noteRow.final_value.v : ''}
       initialNoteSavedAt={noteRow?.decided_at ? String(noteRow.decided_at) : null}
     />

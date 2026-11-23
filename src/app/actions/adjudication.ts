@@ -2,10 +2,14 @@
 
 // Reviewer-side adjudication of disagreements on non-test annotations.
 
+import { randomUUID } from 'crypto';
 import { requireSession } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { ADJUDICATION_NOTE_FIELD, COHORT_MAP_FIELD, CohortMap } from '@/lib/adjudication-rows';
-import { CancerType, FieldValue, TRIAL_LEVEL_SENTINEL } from '@/lib/types';
+import {
+  ADDED_COHORT_FIELD, ADDED_COHORT_PREFIX, ADJUDICATION_NOTE_FIELD, AddedCohort, COHORT_LEVEL_DEFS, COHORT_MAP_FIELD,
+  CohortMap,
+} from '@/lib/adjudication-rows';
+import { ALL_CANCER_TYPES, CancerType, FieldValue, TRIAL_LEVEL_SENTINEL } from '@/lib/types';
 
 export interface ActionResult {
   ok: boolean;
@@ -141,5 +145,88 @@ export async function setAdjudicationNoteAction(opts: { nctId: string; note: str
           decided_by = EXCLUDED.decided_by,
           decided_at = NOW()
   `, [opts.nctId, TRIAL_LEVEL_SENTINEL, ADJUDICATION_NOTE_FIELD, JSON.stringify({ v: note }), session.userId]);
+  return { ok: true };
+}
+
+function cleanCohort(displayName: string, cancerTypes: CancerType[]) {
+  const name = displayName.trim().slice(0, 200);
+  const types = ALL_CANCER_TYPES.filter((ct) => cancerTypes.includes(ct));
+  if (!name) return { error: 'Give the cohort a name.' };
+  if (types.length === 0) return { error: 'Pick at least one cancer type.' };
+  return { name, types };
+}
+
+// Add a cohort neither annotator drew. Its age / ECOG bounds are saved as
+// ordinary decisions, so they can be changed or cleared like any other field.
+export async function addCohortAction(opts: {
+  nctId: string;
+  displayName: string;
+  cancerTypes: CancerType[];
+  bounds: Record<string, FieldValue>;
+}): Promise<ActionResult & { cohort?: AddedCohort }> {
+  let session;
+  try { session = await requireSession('reviewer'); }
+  catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
+  const clean = cleanCohort(opts.displayName, opts.cancerTypes);
+  if ('error' in clean) return { ok: false, error: clean.error };
+
+  const cohort: AddedCohort = {
+    cohortKey: `${ADDED_COHORT_PREFIX}${randomUUID().slice(0, 8)}`,
+    displayName: clean.name,
+    cancerTypes: clean.types,
+    createdAt: new Date().toISOString(),
+  };
+  const { cohortKey, ...record } = cohort;
+  const items: { field_key: string; final_value: { v: unknown } }[] = [
+    { field_key: ADDED_COHORT_FIELD, final_value: { v: record } },
+  ];
+  for (const fk of Object.keys(COHORT_LEVEL_DEFS)) {
+    if (typeof opts.bounds[fk] === 'number') items.push({ field_key: fk, final_value: { v: opts.bounds[fk] } });
+  }
+  await query(`
+    INSERT INTO trial_adjudications (nct_id, cohort_key, cancer_type, field_key, final_value, decided_by, decided_at)
+    SELECT $1::text, $2::text, $3::text, i.field_key, i.final_value, $4::uuid, NOW()
+    FROM jsonb_to_recordset($5::jsonb) AS i(field_key text, final_value jsonb)
+  `, [opts.nctId, cohortKey, TRIAL_LEVEL_SENTINEL, session.userId, JSON.stringify(items)]);
+  return { ok: true, cohort };
+}
+
+// Rename an added cohort or change its cancer types. Values already entered
+// under a removed cancer type are kept in case it is added back.
+export async function updateAddedCohortAction(opts: {
+  nctId: string;
+  cohortKey: string;
+  displayName: string;
+  cancerTypes: CancerType[];
+}): Promise<ActionResult> {
+  let session;
+  try { session = await requireSession('reviewer'); }
+  catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
+  const clean = cleanCohort(opts.displayName, opts.cancerTypes);
+  if ('error' in clean) return { ok: false, error: clean.error };
+
+  const updated = await query(`
+    UPDATE trial_adjudications
+    SET final_value = jsonb_set(final_value, '{v}', (final_value->'v') || $4::jsonb), decided_by = $5, decided_at = NOW()
+    WHERE nct_id = $1 AND cohort_key = $2 AND field_key = $3
+    RETURNING nct_id
+  `, [
+    opts.nctId, opts.cohortKey, ADDED_COHORT_FIELD,
+    JSON.stringify({ displayName: clean.name, cancerTypes: clean.types }), session.userId,
+  ]);
+  return updated.length > 0 ? { ok: true } : { ok: false, error: 'This cohort no longer exists — reload the page.' };
+}
+
+// Remove an added cohort and everything entered in it. The prefix check keeps
+// this from ever touching decisions on the annotators' own cohorts.
+export async function removeAddedCohortAction(opts: { nctId: string; cohortKey: string }): Promise<ActionResult> {
+  try { await requireSession('reviewer'); }
+  catch { return { ok: false, error: 'Not signed in as reviewer.' }; }
+  if (!opts.cohortKey.startsWith(ADDED_COHORT_PREFIX)) return { ok: false, error: 'Only added cohorts can be removed.' };
+
+  await query(
+    `DELETE FROM trial_adjudications WHERE nct_id = $1 AND cohort_key = $2`,
+    [opts.nctId, opts.cohortKey],
+  );
   return { ok: true };
 }
