@@ -136,6 +136,7 @@ function countPopulated(ta: TrialAnswers): number {
     if (cohort.maxAge != null) n++;
     if (cohort.ecogMin != null) n++;
     if (cohort.ecogMax != null) n++;
+    if (cohort.requiredBiomarkers?.length) n++;
     for (const ct of Object.keys(cohort.applicableCancerTypes ?? {}) as CancerType[]) {
       const block = BLOCKS[ct];
       if (!block) continue;

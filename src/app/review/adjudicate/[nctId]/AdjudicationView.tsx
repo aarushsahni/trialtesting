@@ -24,11 +24,12 @@ import { EligibilityText } from '@/components/EligibilityText';
 import { FieldEditor } from '@/components/FieldEditor';
 import { Tooltip } from '@/components/Tooltip';
 import {
-  AddedCohort, COHORT_EXISTS_FIELD, COHORT_LEVEL_DEFS, COHORT_TYPES_DEF, COHORT_TYPES_FIELD, CohortMap, CohortPair,
+  AddedCohort, COHORT_BOUND_DEFS, COHORT_EXISTS_FIELD, COHORT_TYPES_DEF, COHORT_TYPES_FIELD, CohortMap, CohortPair,
   ComparisonRow, ResolvedRow, TrialLevel, adjudicationKey, buildComparisonRows, cohortMapOf, normValue,
   normalizeFieldValue, pairsFor, resolveRows,
 } from '@/lib/adjudication-rows';
 import { BLOCKS } from '@/lib/schema/field-schemas';
+import { REQUIRED_BIOMARKERS_DEF, REQUIRED_BIOMARKERS_FIELD } from '@/lib/schema/required-biomarkers';
 import {
   ALL_CANCER_TYPES, CANCER_TYPE_LABELS, CANCER_TYPE_DEFINITIONS, CancerType, Cohort, FieldValue, TRIAL_LEVEL_SENTINEL,
   TrialAnswers,
@@ -425,6 +426,10 @@ export function AdjudicationView({
     const typesRes = typesRow ? resolvedByKey.get(keyOf(typesRow)) : undefined;
     const finalTypes = typesRes && typesRes.source !== 'unresolved' ? new Set((typesRes.value as string[] | null) ?? []) : null;
 
+    // A basket cohort always shows its required-biomarker row, even when blank:
+    // annotations made before the field existed are all blank there.
+    const isBasket = new Set([...cohortTypes(p.a), ...cohortTypes(p.b), ...(finalTypes ?? [])]).size > 1;
+
     const byType = new Map<string, ComparisonRow[]>();
     for (const r of pairRows) if (r.scope === 'descriptor') byType.set(r.cancerType, [...(byType.get(r.cancerType) ?? []), r]);
 
@@ -497,7 +502,7 @@ export function AdjudicationView({
         {!dropped && (
           <>
             {typesRow && isVisible(typesRow) && renderRow(typesRow, 'Cancer types')}
-            {boundRows.filter(isVisible).map((r) => renderRow(r))}
+            {boundRows.filter((r) => isVisible(r) || (isBasket && r.fieldKey === REQUIRED_BIOMARKERS_FIELD)).map((r) => renderRow(r))}
             {[...byType.entries()].map(([ct, typeRows]) => {
               const inA = !!p.a?.applicableCancerTypes?.[ct as keyof Cohort['applicableCancerTypes']];
               const inB = !!p.b?.applicableCancerTypes?.[ct as keyof Cohort['applicableCancerTypes']];
@@ -873,7 +878,14 @@ function CompareRow({
       className={`${canDecide ? 'cursor-pointer' : ''} ${active ? 'bg-blue-50' : open ? 'bg-red-50/40 hover:bg-red-50' : 'hover:bg-slate-50'}`}
     >
       <td className={`${td} text-slate-700 ${active ? 'shadow-[inset_3px_0_0_#3b82f6]' : ''}`}>
-        <div className="font-medium break-words">{label}</div>
+        <div className="font-medium break-words">
+          {label}
+          {row.def === REQUIRED_BIOMARKERS_DEF && (
+            <Tooltip text={row.def.helpText ?? ''}>
+              <span className="ml-1 text-slate-400 text-xs cursor-help select-none hover:text-blue-600">ⓘ</span>
+            </Tooltip>
+          )}
+        </div>
       </td>
       <td className={`${td} border-l border-l-slate-100 break-words`}><SideValue row={row} side={0} /></td>
       <td className={`${td} border-l border-l-slate-100 break-words`}><SideValue row={row} side={1} /></td>
@@ -984,7 +996,7 @@ function CohortForm({
       </div>
       {trialLevel && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4">
-          {Object.entries(COHORT_LEVEL_DEFS).map(([fk, def]) => (
+          {Object.entries(COHORT_BOUND_DEFS).map(([fk, def]) => (
             <div key={fk}>
               <FieldEditor def={def} value={bounds[fk] ?? null} onChange={(v) => setBounds((b) => ({ ...b, [fk]: v }))} />
             </div>
@@ -1079,11 +1091,12 @@ function sortedTypes(types: string[]): string[] {
 const TONE_TEXT = { a: 'text-violet-700', b: 'text-amber-800' } as const;
 const TONE_DOT = { a: 'bg-violet-500', b: 'bg-amber-500' } as const;
 
-const COHORT_BOUNDS: { key: 'minAge' | 'maxAge' | 'ecogMin' | 'ecogMax'; label: string }[] = [
+const COHORT_BOUNDS: { key: 'minAge' | 'maxAge' | 'ecogMin' | 'ecogMax' | 'requiredBiomarkers'; label: string }[] = [
   { key: 'minAge', label: 'Min age' },
   { key: 'maxAge', label: 'Max age' },
   { key: 'ecogMin', label: 'ECOG min' },
   { key: 'ecogMax', label: 'ECOG max' },
+  { key: 'requiredBiomarkers', label: 'Required biomarkers (any tumor type)' },
 ];
 
 const NOT_IN_COHORT = Symbol('not in cohort');
@@ -1113,7 +1126,7 @@ function AnnotationTable({ label, tone, review }: { label: string; tone: 'a' | '
     (!hideEmpty || vals.some((v) => v !== NOT_IN_COHORT && !isBlank(v))) && !(hideSame && allSame(vals));
 
   const typesRowShown = showRow(cohorts.map(typesOf));
-  const boundRows = COHORT_BOUNDS.filter((b) => showRow(cohorts.map((c) => c[b.key])));
+  const boundRows = COHORT_BOUNDS.filter((b) => showRow(cohorts.map((c) => c[b.key] ?? null)));
   const sections = usedTypes.map((ct) => {
     const fields = Object.entries(BLOCKS[ct as keyof typeof BLOCKS]?.fields ?? {});
     const rows = fields.filter(([fk]) => showRow(cohorts.map((c) => cell(c, ct, fk))));
@@ -1186,7 +1199,7 @@ function AnnotationTable({ label, tone, review }: { label: string; tone: 'a' | '
                   <tr key={b.key}>
                     <td className={`${stickyCol} ${td} text-slate-600`}>{b.label}</td>
                     {cohorts.map((c) => (
-                      <td key={c.cohortKey} className={`${td} border-l`}><ValueChip value={c[b.key]} /></td>
+                      <td key={c.cohortKey} className={`${td} border-l`}><ValueChip value={c[b.key] ?? null} optionHelp={b.key === REQUIRED_BIOMARKERS_FIELD ? REQUIRED_BIOMARKERS_DEF.optionHelp : undefined} /></td>
                     ))}
                   </tr>
                 ))}

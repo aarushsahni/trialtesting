@@ -10,6 +10,7 @@ import { readSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { rowsToCsv } from '@/lib/csv';
 import { BLOCKS } from '@/lib/schema/field-schemas';
+import { REQUIRED_BIOMARKERS_FIELD } from '@/lib/schema/required-biomarkers';
 import {
   BlockAnswers, CancerType, Cohort, FieldValue, TrialAnswers, TRIAL_LEVEL_SENTINEL,
 } from '@/lib/types';
@@ -49,11 +50,12 @@ const TRIAL_LEVEL_FIELDS: { key: string; kind: 'multi' | 'number' }[] = [
   { key: 'ecogMin', kind: 'number' },
   { key: 'ecogMax', kind: 'number' },
 ];
-const COHORT_LEVEL_FIELDS: { key: string; kind: 'number' }[] = [
-  { key: 'minAge', kind: 'number' },
-  { key: 'maxAge', kind: 'number' },
-  { key: 'ecogMin', kind: 'number' },
-  { key: 'ecogMax', kind: 'number' },
+const COHORT_LEVEL_FIELDS: { key: string; kind: 'number' | 'multi'; class: string }[] = [
+  { key: 'minAge', kind: 'number', class: 'other' },
+  { key: 'maxAge', kind: 'number', class: 'other' },
+  { key: 'ecogMin', kind: 'number', class: 'other' },
+  { key: 'ecogMax', kind: 'number', class: 'other' },
+  { key: REQUIRED_BIOMARKERS_FIELD, kind: 'multi', class: 'biomarker' },
 ];
 
 interface AnnotationRow {
@@ -165,13 +167,13 @@ export async function GET() {
       const attC = attCohortMap.get(cohortKey);
       const displayName = refC?.displayName ?? attC?.displayName ?? cohortKey;
 
-      for (const { key, kind } of COHORT_LEVEL_FIELDS) {
+      for (const { key, kind, class: fieldClass } of COHORT_LEVEL_FIELDS) {
         const refV = getScalar(refC, key);
         const attV = getScalar(attC, key);
         rows.push([
           ...base,
           'cohort', cohortKey, displayName, TRIAL_LEVEL_SENTINEL,
-          key, 'other', kind,
+          key, fieldClass, kind,
           valueAsString(refV), valueAsString(attV), outcome(refV, attV),
           refNotes, refFlags, expNotes, expFlags,
         ]);

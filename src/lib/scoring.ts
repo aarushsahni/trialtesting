@@ -2,7 +2,7 @@
 //
 // The data model is two-level (TrialAnswers):
 //   trial-level     : cancerTypes[], minAge, maxAge, ecogMin, ecogMax
-//   cohorts[]       : each with own age/ECOG bounds + applicableCancerTypes
+//   cohorts[]       : each with own age/ECOG bounds, requiredBiomarkers + applicableCancerTypes
 //                     keyed by CancerType → BlockAnswers (descriptor fields)
 //
 // Scoring iterates four levels: trial → cohort → cancerType → field.
@@ -33,6 +33,7 @@ import {
   ReferenceKeyRow,
 } from './db';
 import { BLOCKS } from './schema/field-schemas';
+import { REQUIRED_BIOMARKERS_DEF, REQUIRED_BIOMARKERS_FIELD } from './schema/required-biomarkers';
 import {
   BlockAnswers, CancerType, Cohort, FieldClass, FieldDef, FieldValue,
   TrialAnswers, emptyTrialAnswers,
@@ -131,6 +132,7 @@ const cohortLevelDefs: Record<string, FieldDef> = {
   maxAge: trialLevelDefs.maxAge,
   ecogMin: trialLevelDefs.ecogMin,
   ecogMax: trialLevelDefs.ecogMax,
+  [REQUIRED_BIOMARKERS_FIELD]: REQUIRED_BIOMARKERS_DEF,
 };
 
 // ──────────────────────────────────────────────────────────────────────────

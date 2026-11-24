@@ -25,6 +25,7 @@
 // with a COHORT_EXISTS_FIELD decision of false; decisions made in it are kept.
 
 import { BLOCKS } from './schema/field-schemas';
+import { REQUIRED_BIOMARKERS_DEF, REQUIRED_BIOMARKERS_FIELD } from './schema/required-biomarkers';
 import { hungarian } from './hungarian';
 import {
   ALL_CANCER_TYPES, BlockAnswers, CANCER_TYPE_DEFINITIONS, CancerType, Cohort, FieldDef,
@@ -38,11 +39,15 @@ export const TRIAL_LEVEL_DEFS: Record<string, FieldDef> = {
   ecogMin:     { kind: 'number', label: 'ECOG min', class: 'other' },
   ecogMax:     { kind: 'number', label: 'ECOG max', class: 'other' },
 };
-export const COHORT_LEVEL_DEFS: Record<string, FieldDef> = {
+export const COHORT_BOUND_DEFS: Record<string, FieldDef> = {
   minAge:      { kind: 'number', label: 'Min age (cohort)',  class: 'other' },
   maxAge:      { kind: 'number', label: 'Max age (cohort)',  class: 'other' },
   ecogMin:     { kind: 'number', label: 'ECOG min (cohort)', class: 'other' },
   ecogMax:     { kind: 'number', label: 'ECOG max (cohort)', class: 'other' },
+};
+export const COHORT_LEVEL_DEFS: Record<string, FieldDef> = {
+  ...COHORT_BOUND_DEFS,
+  [REQUIRED_BIOMARKERS_FIELD]: REQUIRED_BIOMARKERS_DEF,
 };
 export const COHORT_EXISTS_FIELD = '__cohort_exists__';
 export const COHORT_TYPES_FIELD = '__cancer_types__';
@@ -198,6 +203,7 @@ export function normalizeAnswers(answers: TrialAnswers): TrialAnswers {
       ...c,
       applicableCancerTypes: types,
       minAge: bound('minAge'), maxAge: bound('maxAge'), ecogMin: bound('ecogMin'), ecogMax: bound('ecogMax'),
+      requiredBiomarkers: c.requiredBiomarkers?.length ? c.requiredBiomarkers : null,
     };
   });
   const trial: TrialLevel = cohorts.length > 0 ? deriveTrialLevel(cohorts) : {
@@ -534,7 +540,7 @@ export function resolveRows(
     if (!c) {
       c = {
         cohortKey: r.cohortKey, displayName: r.cohortDisplayName ?? '', applicableCancerTypes: {},
-        minAge: null, maxAge: null, ecogMin: null, ecogMax: null,
+        minAge: null, maxAge: null, ecogMin: null, ecogMax: null, requiredBiomarkers: null,
       };
       for (const ct of typesByCohort.get(r.cohortKey) ?? []) c.applicableCancerTypes[ct as CancerType] = {};
       cohorts.set(r.cohortKey, c);

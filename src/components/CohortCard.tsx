@@ -9,6 +9,7 @@ import { BlockSection } from './BlockSection';
 import { FieldEditor } from './FieldEditor';
 import { Tooltip } from './Tooltip';
 import { HelpTextMap } from '@/lib/guide-parser';
+import { REQUIRED_BIOMARKERS_DEF } from '@/lib/schema/required-biomarkers';
 
 interface Props {
   cohort: Cohort;
@@ -188,6 +189,15 @@ export function CohortCard({
             disabled={disabled}
           />
         </div>
+
+        {(selectedCts.length > 1 || !!cohort.requiredBiomarkers?.length) && (
+          <FieldEditor
+            def={REQUIRED_BIOMARKERS_DEF}
+            value={cohort.requiredBiomarkers ?? null}
+            onChange={(v) => onChange({ ...cohort, requiredBiomarkers: Array.isArray(v) ? v : null })}
+            disabled={disabled}
+          />
+        )}
 
         <div className="space-y-3">
           {selectedCts.map((ct) => (

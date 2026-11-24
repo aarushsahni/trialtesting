@@ -5,6 +5,7 @@ import { query, AnnotationRow, ReferenceKeyRow, TrialAssignmentRow, TrialRow } f
 import { AppHeader } from '@/components/AppHeader';
 import { Tooltip } from '@/components/Tooltip';
 import { BLOCKS } from '@/lib/schema/field-schemas';
+import { REQUIRED_BIOMARKERS_DEF, REQUIRED_BIOMARKERS_FIELD } from '@/lib/schema/required-biomarkers';
 import {
   ALL_CANCER_TYPES, CANCER_TYPE_DEFINITIONS, CancerType, Cohort, FieldDef,
   FieldValue, TrialAnswers,
@@ -27,6 +28,7 @@ const COHORT_LEVEL_DEFS: Record<string, FieldDef> = {
   maxAge:      { kind: 'number', label: 'Max age',  class: 'other' },
   ecogMin:     { kind: 'number', label: 'ECOG min', class: 'other' },
   ecogMax:     { kind: 'number', label: 'ECOG max', class: 'other' },
+  [REQUIRED_BIOMARKERS_FIELD]: REQUIRED_BIOMARKERS_DEF,
 };
 
 function norm(v: unknown): string {

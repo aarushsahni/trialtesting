@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto';
 import { requireSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import {
-  ADDED_COHORT_FIELD, ADDED_COHORT_PREFIX, ADJUDICATION_NOTE_FIELD, AddedCohort, COHORT_LEVEL_DEFS, COHORT_MAP_FIELD,
+  ADDED_COHORT_FIELD, ADDED_COHORT_PREFIX, ADJUDICATION_NOTE_FIELD, AddedCohort, COHORT_BOUND_DEFS, COHORT_MAP_FIELD,
   CohortMap,
 } from '@/lib/adjudication-rows';
 import { ALL_CANCER_TYPES, CancerType, FieldValue, TRIAL_LEVEL_SENTINEL } from '@/lib/types';
@@ -180,7 +180,7 @@ export async function addCohortAction(opts: {
   const items: { field_key: string; final_value: { v: unknown } }[] = [
     { field_key: ADDED_COHORT_FIELD, final_value: { v: record } },
   ];
-  for (const fk of Object.keys(COHORT_LEVEL_DEFS)) {
+  for (const fk of Object.keys(COHORT_BOUND_DEFS)) {
     if (typeof opts.bounds[fk] === 'number') items.push({ field_key: fk, final_value: { v: opts.bounds[fk] } });
   }
   await query(`

@@ -160,6 +160,9 @@ export interface Cohort {
   maxAge: number | null;
   ecogMin: number | null;
   ecogMax: number | null;
+  // Biomarkers required whatever the tumor type (src/lib/schema/required-biomarkers.ts).
+  // Missing on annotations made before the field existed.
+  requiredBiomarkers?: string[] | null;
 }
 
 // Top-level annotation payload for one trial. Stored as the value of:
