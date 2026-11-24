@@ -81,8 +81,8 @@ function quickPicks(row: ComparisonRow, names: Names): QuickPick[] {
   if (row.fieldKey === COHORT_EXISTS_FIELD) {
     const keepLabel = row.a ? `Keep (${names[0]})` : `Keep (${names[1]})`;
     return [
-      { id: 'a', label: row.a ? keepLabel : `Drop (${names[0]})`, shortcut: '1', value: row.a },
-      { id: 'b', label: row.b ? keepLabel : `Drop (${names[1]})`, shortcut: '2', value: row.b },
+      { id: 'a', label: row.a ? keepLabel : `Remove (${names[0]})`, shortcut: '1', value: row.a },
+      { id: 'b', label: row.b ? keepLabel : `Remove (${names[1]})`, shortcut: '2', value: row.b },
     ];
   }
   const picks: QuickPick[] = [
@@ -237,7 +237,9 @@ export function AdjudicationView({
     return next ? keyOf(next) : null;
   }
 
-  async function decide(items: { row: ComparisonRow; value: FieldValue }[], advanceFrom?: string) {
+  type FieldRef = Pick<ComparisonRow, 'cohortKey' | 'cancerType' | 'fieldKey'>;
+
+  async function decide(items: { row: FieldRef; value: FieldValue }[], advanceFrom?: string) {
     setErr(null);
     const prev = finals;
     const next = { ...finals };
@@ -256,7 +258,7 @@ export function AdjudicationView({
     if (!result.ok) { setFinals(prev); setErr(result.error ?? 'Failed to save'); }
   }
 
-  async function clear(row: ComparisonRow) {
+  async function clear(row: FieldRef) {
     setErr(null);
     const key = keyOf(row);
     const prev = finals;
@@ -267,6 +269,18 @@ export function AdjudicationView({
       nctId: trial.nctId, cohortKey: row.cohortKey, cancerType: row.cancerType, fieldKey: row.fieldKey,
     });
     if (!result.ok) { setFinals(prev); setErr(result.error ?? 'Failed to clear'); }
+  }
+
+  // Taking an annotator cohort off the label keeps every decision made in it,
+  // so putting it back restores the cohort exactly.
+  const existsRef = (cohortKey: string): FieldRef =>
+    ({ cohortKey, cancerType: TRIAL_LEVEL_SENTINEL, fieldKey: COHORT_EXISTS_FIELD });
+  function dropCohort(cohortKey: string) {
+    if (activeKey?.startsWith(`${cohortKey}|`)) setActiveKey(null);
+    void decide([{ row: existsRef(cohortKey), value: false }]);
+  }
+  function restoreCohort(cohortKey: string) {
+    void clear(existsRef(cohortKey));
   }
 
   // Re-pairing changes which two cohorts a cohort key compares, so decisions
@@ -403,7 +417,7 @@ export function AdjudicationView({
     const existsRow = pairRows.find((r) => r.fieldKey === COHORT_EXISTS_FIELD);
     const typesRow = pairRows.find((r) => r.fieldKey === COHORT_TYPES_FIELD);
     const boundRows = pairRows.filter((r) => r.scope === 'cohort' && r.fieldKey !== COHORT_TYPES_FIELD);
-    const dropped = existsRow ? resolvedByKey.get(keyOf(existsRow))?.value === false : false;
+    const dropped = resolvedByKey.get(keyOf(existsRef(p.key)))?.value === false;
     const open = pairRows.map((r) => resolvedByKey.get(keyOf(r))).filter((r): r is ResolvedRow => r?.source === 'unresolved');
     const openFields = open.filter((r) => !isStructural(r));
 
@@ -440,7 +454,18 @@ export function AdjudicationView({
             ) : p.b ? <span className="font-semibold text-slate-900">{cohortLabel(p.b)}</span> : <span className="text-slate-400 italic">no matching cohort</span>}
           </td>
           <td className={`${hdrCell} border-l border-l-slate-200 text-xs`}>
-            {dropped ? <Badge label="Dropped from label" tone="muted" /> : (
+            {dropped ? (
+              <div className="flex items-center gap-3 flex-wrap">
+                <Badge label="Removed from label" tone="muted" />
+                <button
+                  onClick={() => restoreCohort(p.key)}
+                  title="Put this cohort back on the final label, with the decisions made in it"
+                  className="text-[11px] text-blue-600 hover:underline"
+                >
+                  Restore
+                </button>
+              </div>
+            ) : (
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className={open.length ? 'text-red-700 font-medium' : 'text-emerald-700 font-medium'}>
                   {open.length ? `${open.length} open` : 'Nothing open'}
@@ -455,6 +480,15 @@ export function AdjudicationView({
                     All {short[side]}
                   </button>
                 ))}
+                {hasBoth && (
+                  <button
+                    onClick={() => dropCohort(p.key)}
+                    title="Take this cohort off the final label. The annotations and the decisions made in it are kept, and it can be restored."
+                    className="text-[11px] text-red-600 hover:underline ml-auto"
+                  >
+                    Remove from label
+                  </button>
+                )}
               </div>
             )}
           </td>
@@ -699,6 +733,11 @@ export function AdjudicationView({
                   </td>
                   <td colSpan={3} className={`${hdrCell} border-l border-l-slate-200 text-xs text-slate-500`}>
                     Derived from the final cohorts: cancer types are their union, bounds the widest range.
+                    {hasBoth && pairs.length > 0 && resolved.cohorts.length === 0 && (
+                      <span className="block mt-0.5 text-amber-700 font-medium">
+                        Every cohort has been removed, so the label is empty. Restore one or add a new one.
+                      </span>
+                    )}
                   </td>
                 </tr>
                 {trialRows.map((r) => renderRow(r))}
@@ -824,7 +863,7 @@ function CompareRow({
   const editorOpen = row.added ? canDecide && (active || unsaved) : showCustom;
 
   const finalValue = !res || open ? null
-    : isExists ? <span className="font-medium text-slate-800">{res.value ? 'Kept' : 'Dropped'}</span>
+    : isExists ? <span className="font-medium text-slate-800">{res.value ? 'Kept' : 'Removed'}</span>
     : <ValueChip value={res.value} optionHelp={row.def.optionHelp} />;
 
   return (

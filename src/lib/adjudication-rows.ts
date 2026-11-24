@@ -20,7 +20,9 @@
 // then take that annotator's values without further review.
 //
 // A reviewer can also add a cohort neither annotator drew (AddedCohort). Its
-// fields start blank and are filled in with ordinary decisions.
+// fields start blank and are filled in with ordinary decisions. And they can
+// take any annotator cohort off the label, including one both annotators drew,
+// with a COHORT_EXISTS_FIELD decision of false; decisions made in it are kept.
 
 import { BLOCKS } from './schema/field-schemas';
 import { hungarian } from './hungarian';
@@ -484,6 +486,23 @@ export function resolveRows(
     if (r.oneSided) return { ...r, value: r.oneSided === 'a' ? r.a : r.b, source: 'one_sided' };
     return { ...r, value: null, source: 'unresolved' };
   });
+
+  // A cohort both annotators drew has no existence row to decide, so one is
+  // added here when the reviewer took the cohort off the label.
+  if (hasA && hasB) {
+    const hasExists = new Set(resolved.filter((r) => r.scope === 'cohort_existence').map((r) => r.cohortKey));
+    for (let i = 0; i < resolved.length; i++) {
+      const r = resolved[i];
+      if (r.scope !== 'cohort' || r.added || r.fieldKey !== COHORT_TYPES_FIELD || hasExists.has(r.cohortKey)) continue;
+      if (decision(adjudicationKey(r.cohortKey, TRIAL_LEVEL_SENTINEL, COHORT_EXISTS_FIELD)) !== false) continue;
+      resolved.splice(i++, 0, {
+        cohortKey: r.cohortKey, cohortDisplayName: r.cohortDisplayName, cancerType: TRIAL_LEVEL_SENTINEL,
+        scope: 'cohort_existence', fieldKey: COHORT_EXISTS_FIELD, def: COHORT_EXISTS_DEF,
+        a: true, b: true, rawA: true, rawB: true, agree: true, needsDecision: false,
+        value: false, source: 'adjudicated',
+      });
+    }
+  }
 
   // A cohort is dropped only when its existence was decided false; an
   // undecided existence keeps it (and stays open).
